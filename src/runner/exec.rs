@@ -67,12 +67,28 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
         use std::os::unix::process::CommandExt;
         cmd.pre_exec(|| {
             libc::setsid();
-            libc::prctl(38, 1, 0, 0, 0); // PR_SET_NO_NEW_PRIVS
+            if let Err(e) = crate::runner::linux_seccomp::install() {
+                std::env::set_var("INTERENV_SECCOMP_FAILED", &e);
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+            }
             Ok(())
         });
     }
 
-    #[cfg(all(unix, not(target_os = "linux")))]
+    #[cfg(target_os = "macos")]
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        cmd.pre_exec(|| {
+            libc::setsid();
+            if let Err(e) = crate::runner::macos_sandbox::install() {
+                std::env::set_var("INTERENV_SANDBOX_FAILED", &e);
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+            }
+            Ok(())
+        });
+    }
+
+    #[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
     unsafe {
         use std::os::unix::process::CommandExt;
         cmd.pre_exec(|| {

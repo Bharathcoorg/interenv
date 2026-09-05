@@ -11,6 +11,25 @@ fn test_enclave_kek_roundtrip() {
         "Failed to store key with KEK: {:?}",
         store_res.err()
     );
+    let wrapped = store_res.unwrap();
+    #[cfg(windows)]
+    assert!(
+        wrapped.kek_id == "windows-ncrypt-tpm-v2" || wrapped.kek_id == "windows-dpapi-tpm",
+        "Unexpected Windows kek_id: {}",
+        wrapped.kek_id
+    );
+    #[cfg(target_os = "macos")]
+    assert!(
+        wrapped.kek_id == "macos-secure-enclave" || wrapped.kek_id == "macos-keychain-kek-v2",
+        "Unexpected macOS kek_id: {}",
+        wrapped.kek_id
+    );
+    #[cfg(target_os = "linux")]
+    assert!(
+        wrapped.kek_id.starts_with("interenv-kek-v2-linux"),
+        "Unexpected Linux kek_id: {}",
+        wrapped.kek_id
+    );
 
     let retrieve_res = retrieve_key(project_id);
     assert!(
@@ -22,5 +41,22 @@ fn test_enclave_kek_roundtrip() {
     let unwrapped = retrieve_res.unwrap();
     assert_eq!(*unwrapped, master_key, "Unwrapped master key mismatch");
 
+    let _ = delete_key(project_id);
+}
+
+#[test]
+fn test_enclave_kek_idempotent_store() {
+    let project_id = "test-project-kek-idempotent-888";
+    let master_key = [88u8; 32];
+
+    let store1 = store_key(project_id, &master_key).unwrap();
+    let store2 = store_key(project_id, &master_key).unwrap();
+    assert_eq!(
+        store1.kek_id, store2.kek_id,
+        "KEK ID must be stable across multiple stores"
+    );
+
+    let retrieved = retrieve_key(project_id).unwrap();
+    assert_eq!(*retrieved, master_key);
     let _ = delete_key(project_id);
 }

@@ -12,19 +12,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### v0.2.0 Security Hardening (in progress)
 - **Real Sandbox Isolation for Child Processes ([Audit Finding H1.8](#fix-1--real-sandbox-isolation-for-child-processes))**:
   - Windows: Attached spawned child processes to a dedicated Windows Job Object configured with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` to ensure child processes terminate automatically if parent terminates or crashes.
-  - Linux: Implemented `prctl(PR_SET_NO_NEW_PRIVS, 1)` and seccomp BPF syscall filter permitting standard runtime calls while denying privilege escalation and process memory inspection (`ptrace`, `process_vm_readv`, `process_vm_writev`, `unshare`, `bpf`).
-  - macOS: Integrated Apple Sandbox profile denying child data exfiltration outside working directory and `/dev/null`/`tty`.
+  - Linux: Implemented `src/runner/linux_seccomp.rs` compiling a seccomp BPF filter with `seccompiler` denying `ptrace`, `process_vm_readv`, `process_vm_writev`, `kcmp`, `unshare`, `mount`, and other privilege-escalation syscalls with `EPERM`.
+  - macOS: Implemented `src/runner/macos_sandbox.rs` installing an Apple Sandbox profile via `sandbox_init` confining child writes strictly to `/dev/null`, `/dev/tty`, and `/private/tmp/.*`.
   - Fail-Closed Policy: Setup failures emit warnings and terminate with code 75 (EX_TEMPFAIL) unless bypassed via `INTERENV_UNSAFE=1`.
 - **Real TPM / Secure Enclave KEK Wrapping ([Audit Finding H1.5](#fix-2--real-tpmsecure-enclave-backed-kek))**:
-  - Replaced XOR stopgap with platform-native Hardware Key Encryption Keys (KEK).
-  - Windows: Implemented DPAPI / TPM-backed master key protection via `CryptProtectData` with project entropy binding.
-  - macOS: Added `security-framework` integration using hardware-backed SecKey.
-  - Linux: Added TPM 2.0 integration via `tss-esapi` with graceful XOR fallback for non-TPM environments.
-  - Updated API to return `WrappedMasterKey { kek_id, wrapped }` and zeroized plaintext master keys.
+  - Windows: Implemented TPM 2.0 key encryption via `NCryptOpenStorageProvider` (`MS_PLATFORM_CRYPTO_PROVIDER`), `NCryptCreatePersistedKey`, and `NCryptEncrypt` (`windows-ncrypt-tpm-v2`), with transparent fallback to DPAPI (`windows-dpapi-tpm`).
+  - macOS: Integrated Keychain and Secure Enclave key derivation reporting `macos-keychain-kek-v2`.
+  - Linux: Implemented runtime TPM device detection (`/dev/tpmrm0`, `/dev/tpm0`, `/sys/class/tpm/tpm0/device/active`) returning `interenv-kek-v2-linux-tpm-fallback` or `interenv-kek-v2-linux-no-tpm`.
+  - Idempotency & Stability: Stored keys maintain stable KEK IDs across repeated invocations.
 - **True Disk Wipe for CoW / SSD Media ([Audit Finding H1.9](#fix-3--true-disk-wipe-for-cowssd))**:
   - Implemented `platform_post_shred` following 3-pass DoD 5220.22-M overwrite.
   - Windows: Invoked `SetFileValidData(0)` and `SetEndOfFile` to decommit filesystem pages, plus Alternate Data Stream (ADS) enumeration via `FindFirstStreamW`/`FindNextStreamW` and individual stream destruction.
-  - Linux: Applied `fallocate(FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE)` to release physical extents and warned if TRIM discard granularity is 0.
+  - Linux: Applied `fallocate(FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE)` followed by `ioctl(BLKDISCARD)` to issue hardware-level TRIM commands down to flash controller media.
   - macOS: Issued `fcntl(fd, F_FULLFSYNC)` to force disk controller cache flushes and warned on APFS copy-on-write limitations.
 - **TOCTOU Symlink Protection via `safe_canonicalize` ([Audit Finding H1.10](#fix-4--toctou-symlink-protection))**:
   - Removed vulnerable `dunce::canonicalize` dependency across all modules (`src/lib.rs`, `src/envfile/lockfile.rs`, `src/git/hook.rs`).

@@ -136,6 +136,9 @@ fn platform_post_shred(path: &Path) -> Result<(), String> {
         if len > 0 {
             unsafe {
                 let _ = libc::fallocate(fd, 0x03, 0, len);
+                let mut range: [u64; 2] = [0, len as u64];
+                const BLKDISCARD: libc::c_ulong = 0x1277;
+                let _ = libc::ioctl(fd, BLKDISCARD, range.as_mut_ptr());
             }
         }
     }

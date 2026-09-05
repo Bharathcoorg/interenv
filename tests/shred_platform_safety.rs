@@ -17,4 +17,12 @@ fn test_shred_platform_safety() {
         shred_res.err()
     );
     assert!(!path.exists(), "File must not exist after shred_file");
+
+    #[cfg(target_os = "linux")]
+    {
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(b"TEST_BLKDISCARD_AND_HOLE_PUNCH").unwrap();
+        let p = f.path().to_path_buf();
+        assert!(shred_file(&p).is_ok());
+    }
 }
