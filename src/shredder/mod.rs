@@ -1,14 +1,15 @@
+use rand::rngs::OsRng;
+use rand::RngCore;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
-use rand::rngs::OsRng;
-use rand::RngCore;
 
 /// Securely overwrite and delete a sensitive plaintext file from disk.
 /// Performs a 3-pass DoD 5220.22-M style overwrite:
 /// 1. Overwrite with 0x00
 /// 2. Overwrite with 0xFF
 /// 3. Overwrite with cryptographically secure random bytes
+///
 /// Followed by flushing to physical storage, truncating to 0 bytes, and unlinking.
 pub fn shred_file<P: AsRef<Path>>(path: P) -> Result<(), String> {
     let p = path.as_ref();
@@ -48,7 +49,8 @@ pub fn shred_file<P: AsRef<Path>>(path: P) -> Result<(), String> {
     let _ = OpenOptions::new().write(true).truncate(true).open(p);
 
     // Delete file from disk
-    fs::remove_file(p).map_err(|e| format!("Failed to delete shredded file {}: {}", p.display(), e))?;
+    fs::remove_file(p)
+        .map_err(|e| format!("Failed to delete shredded file {}: {}", p.display(), e))?;
 
     Ok(())
 }

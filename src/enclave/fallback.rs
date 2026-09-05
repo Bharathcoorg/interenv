@@ -1,5 +1,5 @@
-use std::env;
 use dialoguer::Password;
+use std::env;
 use zeroize::Zeroizing;
 
 use crate::crypto::kdf::derive_key_from_passphrase;

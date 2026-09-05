@@ -38,8 +38,8 @@ pub fn decrypt_payload(
 ) -> Result<Zeroizing<Vec<u8>>, String> {
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
 
-    let nonce_bytes = hex::decode(&payload.nonce_hex)
-        .map_err(|e| format!("Invalid nonce hex: {}", e))?;
+    let nonce_bytes =
+        hex::decode(&payload.nonce_hex).map_err(|e| format!("Invalid nonce hex: {}", e))?;
     if nonce_bytes.len() != 12 {
         return Err("Nonce must be 12 bytes".into());
     }
@@ -73,7 +73,7 @@ mod tests {
         let key = [42u8; 32];
         let secret = b"SECRET=supersecret";
         let mut encrypted = encrypt_payload(secret, &key).unwrap();
-        
+
         // Corrupt ciphertext
         let mut bytes = hex::decode(&encrypted.ciphertext_hex).unwrap();
         bytes[0] ^= 0xFF;

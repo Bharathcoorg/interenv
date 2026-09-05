@@ -7,12 +7,12 @@ const SERVICE_NAME: &str = "interenv";
 pub fn store_key(project_id: &str, master_key: &[u8; 32]) -> Result<(), String> {
     let entry = Entry::new(SERVICE_NAME, project_id)
         .map_err(|e| format!("Keyring initialization error: {}", e))?;
-    
+
     let key_hex = hex::encode(master_key);
     entry
         .set_password(&key_hex)
         .map_err(|e| format!("Failed to seal key in hardware/OS keyring: {}", e))?;
-    
+
     Ok(())
 }
 
@@ -20,14 +20,13 @@ pub fn store_key(project_id: &str, master_key: &[u8; 32]) -> Result<(), String> 
 pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
     let entry = Entry::new(SERVICE_NAME, project_id)
         .map_err(|e| format!("Keyring initialization error: {}", e))?;
-    
+
     let key_hex = entry
         .get_password()
         .map_err(|e| format!("Failed to retrieve key from hardware/OS keyring: {}. Was it locked on another machine?", e))?;
-    
-    let bytes = hex::decode(&key_hex)
-        .map_err(|e| format!("Corrupted key in keyring: {}", e))?;
-    
+
+    let bytes = hex::decode(&key_hex).map_err(|e| format!("Corrupted key in keyring: {}", e))?;
+
     if bytes.len() != 32 {
         return Err("Stored keyring key is not 32 bytes".into());
     }
@@ -41,7 +40,7 @@ pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
 pub fn delete_key(project_id: &str) -> Result<(), String> {
     let entry = Entry::new(SERVICE_NAME, project_id)
         .map_err(|e| format!("Keyring initialization error: {}", e))?;
-    
+
     match entry.delete_password() {
         Ok(_) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),

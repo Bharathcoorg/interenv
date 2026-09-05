@@ -79,8 +79,7 @@ pub fn install_pre_commit_hook(git_dir: &Path) -> Result<(), String> {
 pub fn uninstall_pre_commit_hook(git_dir: &Path) -> Result<(), String> {
     let pre_commit_path = git_dir.join("hooks").join("pre-commit");
     if pre_commit_path.exists() {
-        fs::remove_file(&pre_commit_path)
-            .map_err(|e| format!("Failed to remove hook: {}", e))?;
+        fs::remove_file(&pre_commit_path).map_err(|e| format!("Failed to remove hook: {}", e))?;
     }
     Ok(())
 }

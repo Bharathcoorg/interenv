@@ -1,8 +1,8 @@
 pub mod fallback;
 pub mod keyring_backend;
 
-use zeroize::Zeroizing;
 use crate::envfile::lockfile::KeyProviderType;
+use zeroize::Zeroizing;
 
 /// Store the master key using either OS hardware enclave keyring or passphrase fallback.
 pub fn store_key(
@@ -25,7 +25,9 @@ pub fn store_key(
                 eprintln!("⚠️  Hardware enclave storage unavailable ({}). Falling back to passphrase protection...", e);
                 let pass = match custom_passphrase {
                     Some(p) => p.to_string(),
-                    None => fallback::prompt_or_get_passphrase("Enter a passphrase to lock project secrets")?,
+                    None => fallback::prompt_or_get_passphrase(
+                        "Enter a passphrase to lock project secrets",
+                    )?,
                 };
                 let _ = fallback::derive_passphrase_key(&pass, salt)?;
                 Ok(KeyProviderType::Passphrase)
@@ -54,7 +56,8 @@ pub fn retrieve_key(
             }
         }
         KeyProviderType::Passphrase => {
-            let pass = fallback::prompt_or_get_passphrase("Enter project passphrase to unlock secrets")?;
+            let pass =
+                fallback::prompt_or_get_passphrase("Enter project passphrase to unlock secrets")?;
             fallback::derive_passphrase_key(&pass, salt)
         }
     }

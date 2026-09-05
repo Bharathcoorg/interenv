@@ -28,7 +28,10 @@ PORT=3000
     // 2. Parse dotenv
     let env_map = parse_dotenv(original_content);
     assert_eq!(env_map.len(), 4);
-    assert_eq!(env_map.get("OPENAI_API_KEY").unwrap(), "sk-proj-test123456789");
+    assert_eq!(
+        env_map.get("OPENAI_API_KEY").unwrap(),
+        "sk-proj-test123456789"
+    );
     assert_eq!(env_map.get("PORT").unwrap(), "3000");
 
     // 3. Encrypt with passphrase mode
@@ -54,7 +57,10 @@ PORT=3000
 
     // 4. Securely shred original plaintext file
     shred_file(&env_path).unwrap();
-    assert!(!env_path.exists(), "Plaintext .env must be deleted from disk");
+    assert!(
+        !env_path.exists(),
+        "Plaintext .env must be deleted from disk"
+    );
 
     // 5. Decrypt from lockfile
     let loaded_lock = InterLock::load(&lock_path).unwrap();
@@ -66,8 +72,14 @@ PORT=3000
     let decrypted_bytes = decrypt_payload(&loaded_lock.payload, &recovered_key).unwrap();
 
     let recovered_map: EnvMap = serde_json::from_slice(&decrypted_bytes).unwrap();
-    assert_eq!(recovered_map.get("OPENAI_API_KEY").unwrap(), "sk-proj-test123456789");
-    assert_eq!(recovered_map.get("STRIPE_WEBHOOK_SECRET").unwrap(), "whsec_987654321");
+    assert_eq!(
+        recovered_map.get("OPENAI_API_KEY").unwrap(),
+        "sk-proj-test123456789"
+    );
+    assert_eq!(
+        recovered_map.get("STRIPE_WEBHOOK_SECRET").unwrap(),
+        "whsec_987654321"
+    );
 
     // 6. Test in-memory process execution with injected environment variables
     let test_args = vec!["-V".to_string()];

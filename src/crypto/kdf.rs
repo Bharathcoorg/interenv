@@ -18,7 +18,10 @@ pub fn generate_salt() -> [u8; 16] {
 }
 
 /// Derive a 32-byte master key from a user passphrase and salt using Argon2id.
-pub fn derive_key_from_passphrase(passphrase: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 32]>, String> {
+pub fn derive_key_from_passphrase(
+    passphrase: &str,
+    salt: &[u8],
+) -> Result<Zeroizing<[u8; 32]>, String> {
     let params = Params::new(64 * 1024, 3, 4, Some(32))
         .map_err(|e| format!("Argon2 params error: {}", e))?;
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);

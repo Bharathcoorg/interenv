@@ -43,7 +43,10 @@ pub fn format_dotenv(map: &EnvMap) -> String {
     out.push_str("# Sealed by ghostenv - https://github.com/Bharathcoorg/ghostenv\n");
     for (k, v) in map {
         if v.contains('\n') || v.contains(' ') || v.contains('"') || v.contains('\'') {
-            let escaped = v.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+            let escaped = v
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\n', "\\n");
             out.push_str(&format!("{}=\"{}\"\n", k, escaped));
         } else {
             out.push_str(&format!("{}={}\n", k, v));
@@ -83,10 +86,10 @@ fn parse_value(raw: &str) -> String {
 }
 
 fn find_closing_quote(s: &str, quote_char: char) -> Option<usize> {
-    let mut chars = s.char_indices().skip(1);
+    let chars = s.char_indices().skip(1);
     let mut escaped = false;
 
-    while let Some((idx, ch)) = chars.next() {
+    for (idx, ch) in chars {
         if escaped {
             escaped = false;
             continue;
@@ -145,7 +148,10 @@ EMPTY=
         let map = parse_dotenv(content);
         assert_eq!(map.get("OPENAI_API_KEY").unwrap(), "sk-123456789");
         assert_eq!(map.get("PORT").unwrap(), "8080");
-        assert_eq!(map.get("DATABASE_URL").unwrap(), "postgres://user:pass@localhost:5432/db?ssl=true");
+        assert_eq!(
+            map.get("DATABASE_URL").unwrap(),
+            "postgres://user:pass@localhost:5432/db?ssl=true"
+        );
         assert_eq!(map.get("MULTI_LINE").unwrap(), "hello\nworld");
         assert_eq!(map.get("EMPTY").unwrap(), "");
     }

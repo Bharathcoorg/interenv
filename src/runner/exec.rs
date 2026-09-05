@@ -4,11 +4,7 @@ use crate::envfile::parser::EnvMap;
 
 /// Execute a command in a child process with decrypted secrets injected into memory.
 /// Plaintext secrets NEVER touch disk or shell history.
-pub fn execute_with_env(
-    program: &str,
-    args: &[String],
-    env_vars: &EnvMap,
-) -> Result<i32, String> {
+pub fn execute_with_env(program: &str, args: &[String], env_vars: &EnvMap) -> Result<i32, String> {
     if program.is_empty() {
         return Err("No command specified to run. Example: interenv run npm run dev".into());
     }
@@ -36,6 +32,8 @@ pub fn execute_with_env(
 
     let status = child.wait().map_err(|e| format!("Process error: {}", e))?;
 
-    let exit_code = status.code().unwrap_or(if status.success() { 0 } else { 1 });
+    let exit_code = status
+        .code()
+        .unwrap_or(if status.success() { 0 } else { 1 });
     Ok(exit_code)
 }

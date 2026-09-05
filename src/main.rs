@@ -1,15 +1,17 @@
+use clap::Parser;
+use colored::*;
+use dialoguer::Confirm;
+use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process;
-use clap::Parser;
-use colored::*;
-use dialoguer::Confirm;
-use sha2::{Digest, Sha256};
 use tempfile::Builder;
 
-use interenv::cli::{Cli, Commands, EditArgs, HookAction, HookArgs, LockArgs, RunArgs, ShowArgs, ShredArgs};
+use interenv::cli::{
+    Cli, Commands, EditArgs, HookAction, HookArgs, LockArgs, RunArgs, ShowArgs, ShredArgs,
+};
 use interenv::crypto::cipher::{decrypt_payload, encrypt_payload};
 use interenv::crypto::kdf::{derive_key_from_passphrase, generate_random_key, generate_salt};
 use interenv::enclave::{self, fallback};
@@ -54,7 +56,12 @@ fn compute_project_id(cwd: &Path) -> (String, String) {
 }
 
 fn handle_lock(args: LockArgs) -> Result<(), String> {
-    println!("{}", "🛡️  InterEnv: Sealing Project Secrets into Hardware Enclave...".bold().cyan());
+    println!(
+        "{}",
+        "🛡️  InterEnv: Sealing Project Secrets into Hardware Enclave..."
+            .bold()
+            .cyan()
+    );
 
     if !args.file.exists() {
         return Err(format!(
@@ -65,7 +72,10 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
 
     if args.output.exists() && !args.force {
         let overwrite = Confirm::new()
-            .with_prompt(format!("Lockfile '{}' already exists. Overwrite?", args.output.display()))
+            .with_prompt(format!(
+                "Lockfile '{}' already exists. Overwrite?",
+                args.output.display()
+            ))
             .default(false)
             .interact()
             .map_err(|e| format!("Confirmation error: {}", e))?;
@@ -80,7 +90,11 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
 
     let env_map = parse_dotenv(&raw_content);
     if env_map.is_empty() {
-        println!("{} No environment variables found in {}.", "⚠️ ".yellow(), args.file.display());
+        println!(
+            "{} No environment variables found in {}.",
+            "⚠️ ".yellow(),
+            args.file.display()
+        );
     }
 
     let cwd = env::current_dir().map_err(|e| format!("Cannot get current directory: {}", e))?;
@@ -100,8 +114,8 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
     };
 
     // Serialize EnvMap to JSON for structured encrypted storage
-    let json_bytes = serde_json::to_vec(&env_map)
-        .map_err(|e| format!("Serialization error: {}", e))?;
+    let json_bytes =
+        serde_json::to_vec(&env_map).map_err(|e| format!("Serialization error: {}", e))?;
 
     let payload = encrypt_payload(&json_bytes, &master_key)?;
     let key_names: Vec<String> = env_map.keys().cloned().collect();
@@ -124,25 +138,43 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
     );
 
     if provider == KeyProviderType::HardwareEnclave {
-        println!("🔐 Storage: Hardware Enclave / OS Keyring ({})", project_id.cyan());
+        println!(
+            "🔐 Storage: Hardware Enclave / OS Keyring ({})",
+            project_id.cyan()
+        );
     } else {
         println!("🔑 Storage: Argon2id Passphrase Shield");
     }
 
     // Shred plaintext file
     if !args.no_shred {
-        println!("{}", "🔥 Securely shredding plaintext file from disk (DoD 5220.22-M)...".yellow());
+        println!(
+            "{}",
+            "🔥 Securely shredding plaintext file from disk (DoD 5220.22-M)...".yellow()
+        );
         shred_file(&args.file)?;
-        println!("{} Plaintext '{}' destroyed. Zero secrets remain on disk!", "✨".green(), args.file.display());
+        println!(
+            "{} Plaintext '{}' destroyed. Zero secrets remain on disk!",
+            "✨".green(),
+            args.file.display()
+        );
     } else {
-        println!("{}", "⚠️  WARNING: Plaintext file was kept (--no-shred). Make sure not to commit it!".bold().yellow());
+        println!(
+            "{}",
+            "⚠️  WARNING: Plaintext file was kept (--no-shred). Make sure not to commit it!"
+                .bold()
+                .yellow()
+        );
     }
 
     // Automatically check Git hook
     if let Some(git_dir) = find_git_dir(&cwd) {
         let hook_path = git_dir.join("hooks").join("pre-commit");
         if !hook_path.exists() {
-            println!("💡 Tip: Install Git pre-commit leak protection with: {}", "interenv hook install".bold().cyan());
+            println!(
+                "💡 Tip: Install Git pre-commit leak protection with: {}",
+                "interenv hook install".bold().cyan()
+            );
         }
     }
 
@@ -151,7 +183,7 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
 
 fn load_and_decrypt_env(lockfile_path: Option<&Path>) -> Result<(InterLock, EnvMap), String> {
     let cwd = env::current_dir().map_err(|e| format!("Cannot get current directory: {}", e))?;
-    
+
     let path = match lockfile_path {
         Some(p) => p.to_path_buf(),
         None => InterLock::find_lockfile(&cwd).ok_or_else(|| {
@@ -206,7 +238,10 @@ fn handle_show(args: ShowArgs) -> Result<(), String> {
 
     if args.raw {
         if !args.reveal {
-            println!("{}", "# Use --reveal to display unmasked secret values".yellow());
+            println!(
+                "{}",
+                "# Use --reveal to display unmasked secret values".yellow()
+            );
         }
         for (k, v) in &env_map {
             if args.reveal {
@@ -227,7 +262,10 @@ fn handle_show(args: ShowArgs) -> Result<(), String> {
             println!("{:<30} {:<30}", k.cyan(), displayed);
         }
         if !args.reveal {
-            println!("\n💡 Pass {} to view unmasked plaintext values.", "--reveal".bold().yellow());
+            println!(
+                "\n💡 Pass {} to view unmasked plaintext values.",
+                "--reveal".bold().yellow()
+            );
         }
     }
 
@@ -248,43 +286,74 @@ fn handle_status() -> Result<(), String> {
     let cwd = env::current_dir().map_err(|e| format!("Cannot get current directory: {}", e))?;
     let lockfile = InterLock::find_lockfile(&cwd);
 
-    println!("{}", "══════════════════════════════════════════════════════════════".cyan());
+    println!(
+        "{}",
+        "══════════════════════════════════════════════════════════════".cyan()
+    );
     println!("             🛡️  INTERENV REPOSITORY SECURITY STATUS           ");
-    println!("{}", "══════════════════════════════════════════════════════════════".cyan());
+    println!(
+        "{}",
+        "══════════════════════════════════════════════════════════════".cyan()
+    );
 
     match lockfile {
         Some(path) => {
             let lock = InterLock::load(&path)?;
-            println!("🔒 Lockfile:       {} ({})", "ACTIVE".bold().green(), path.display());
+            println!(
+                "🔒 Lockfile:       {} ({})",
+                "ACTIVE".bold().green(),
+                path.display()
+            );
             println!("🏷️  Project Name:   {}", lock.project_name.bold());
-            println!("🔑 Keys Sealed:    {} variables", lock.keys_count.to_string().green());
+            println!(
+                "🔑 Keys Sealed:    {} variables",
+                lock.keys_count.to_string().green()
+            );
             println!("🛡️  Key Provider:   {:?}", lock.key_provider);
             println!("🕒 Last Updated:   {}", lock.updated_at);
         }
         None => {
-            println!("🔒 Lockfile:       {} (Run 'interenv lock' to seal secrets)", "NONE FOUND".bold().red());
+            println!(
+                "🔒 Lockfile:       {} (Run 'interenv lock' to seal secrets)",
+                "NONE FOUND".bold().red()
+            );
         }
     }
 
     // Check for plaintext .env leakage
     let plaintext_env = cwd.join(".env");
     if plaintext_env.exists() {
-        println!("⚠️  Plaintext .env: {} (POTENTIAL LEAK RISK - run 'interenv lock')", "EXISTS ON DISK".bold().red());
+        println!(
+            "⚠️  Plaintext .env: {} (POTENTIAL LEAK RISK - run 'interenv lock')",
+            "EXISTS ON DISK".bold().red()
+        );
     } else {
-        println!("✨ Plaintext .env: {} (Zero plaintext on disk)", "CLEAN".bold().green());
+        println!(
+            "✨ Plaintext .env: {} (Zero plaintext on disk)",
+            "CLEAN".bold().green()
+        );
     }
 
     // Check Git hook
     if let Some(git_dir) = find_git_dir(&cwd) {
         let hook_path = git_dir.join("hooks").join("pre-commit");
         if hook_path.exists() {
-            println!("🛡️  Git Hook:       {} (Blocks accidental secret commits)", "INSTALLED".bold().green());
+            println!(
+                "🛡️  Git Hook:       {} (Blocks accidental secret commits)",
+                "INSTALLED".bold().green()
+            );
         } else {
-            println!("🛡️  Git Hook:       {} (Run 'interenv hook install')", "NOT INSTALLED".bold().yellow());
+            println!(
+                "🛡️  Git Hook:       {} (Run 'interenv hook install')",
+                "NOT INSTALLED".bold().yellow()
+            );
         }
     }
 
-    println!("{}", "══════════════════════════════════════════════════════════════".cyan());
+    println!(
+        "{}",
+        "══════════════════════════════════════════════════════════════".cyan()
+    );
     Ok(())
 }
 
@@ -292,9 +361,8 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
     let cwd = env::current_dir().map_err(|e| format!("Cannot get current directory: {}", e))?;
     let lock_path = match args.lockfile {
         Some(p) => p,
-        None => InterLock::find_lockfile(&cwd).ok_or_else(|| {
-            "No .interenv.lock found. Run 'interenv lock' first.".to_string()
-        })?,
+        None => InterLock::find_lockfile(&cwd)
+            .ok_or_else(|| "No .interenv.lock found. Run 'interenv lock' first.".to_string())?,
     };
 
     let (mut lock, env_map) = load_and_decrypt_env(Some(&lock_path))?;
@@ -307,19 +375,22 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
         .tempfile_in(&cwd)
         .map_err(|e| format!("Failed to create secure temporary file: {}", e))?;
 
-    temp_file.write_all(dotenv_str.as_bytes())
+    temp_file
+        .write_all(dotenv_str.as_bytes())
         .map_err(|e| format!("Failed to write to temp file: {}", e))?;
 
     let temp_path = temp_file.path().to_path_buf();
 
     // Determine editor
-    let editor = env::var("EDITOR").or_else(|_| env::var("VISUAL")).unwrap_or_else(|_| {
-        if cfg!(windows) {
-            "notepad".to_string()
-        } else {
-            "nano".to_string()
-        }
-    });
+    let editor = env::var("EDITOR")
+        .or_else(|_| env::var("VISUAL"))
+        .unwrap_or_else(|_| {
+            if cfg!(windows) {
+                "notepad".to_string()
+            } else {
+                "nano".to_string()
+            }
+        });
 
     println!("✏️  Opening temporary buffer with '{}'...", editor.cyan());
 
@@ -343,12 +414,11 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
     let new_env_map = parse_dotenv(&modified_str);
 
     // Re-encrypt
-    let salt = hex::decode(&lock.kdf_salt_hex)
-        .map_err(|e| format!("Invalid salt hex: {}", e))?;
+    let salt = hex::decode(&lock.kdf_salt_hex).map_err(|e| format!("Invalid salt hex: {}", e))?;
     let master_key = enclave::retrieve_key(&lock.project_id, lock.key_provider, &salt)?;
 
-    let json_bytes = serde_json::to_vec(&new_env_map)
-        .map_err(|e| format!("Serialization error: {}", e))?;
+    let json_bytes =
+        serde_json::to_vec(&new_env_map).map_err(|e| format!("Serialization error: {}", e))?;
     let new_payload = encrypt_payload(&json_bytes, &master_key)?;
 
     lock.payload = new_payload;
@@ -376,7 +446,10 @@ fn handle_hook(args: HookArgs) -> Result<(), String> {
     match args.action {
         HookAction::Install => {
             install_pre_commit_hook(&git_dir)?;
-            println!("{} Git pre-commit leak protection hook installed successfully!", "🛡️ ".green());
+            println!(
+                "{} Git pre-commit leak protection hook installed successfully!",
+                "🛡️ ".green()
+            );
             println!("Accidental commits of .env files will now be automatically blocked.");
         }
         HookAction::Uninstall => {
@@ -390,11 +463,20 @@ fn handle_hook(args: HookArgs) -> Result<(), String> {
 
 fn handle_shred(args: ShredArgs) -> Result<(), String> {
     if !args.target.exists() {
-        return Err(format!("Target file '{}' does not exist.", args.target.display()));
+        return Err(format!(
+            "Target file '{}' does not exist.",
+            args.target.display()
+        ));
     }
 
-    println!("🔥 Securely shredding '{}' (DoD 5220.22-M 3-pass overwrite)...", args.target.display());
+    println!(
+        "🔥 Securely shredding '{}' (DoD 5220.22-M 3-pass overwrite)...",
+        args.target.display()
+    );
     shred_file(&args.target)?;
-    println!("{} File destroyed and unlinked from physical storage.", "✅".green());
+    println!(
+        "{} File destroyed and unlinked from physical storage.",
+        "✅".green()
+    );
     Ok(())
 }
