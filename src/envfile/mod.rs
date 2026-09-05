@@ -9,7 +9,7 @@ pub use lockfile::{InterLock, KeyProviderType, DEFAULT_LOCK_FILE};
 pub use parser::{format_dotenv, is_valid_env_key, parse_dotenv, EnvMap};
 
 #[derive(Debug, Clone, Default)]
-pub struct Secrets(pub BTreeMap<String, Zeroizing<String>>);
+pub struct Secrets(BTreeMap<String, Zeroizing<String>>);
 
 impl Secrets {
     pub fn new(map: BTreeMap<String, Zeroizing<String>>) -> Self {
@@ -65,5 +65,40 @@ impl Zeroize for Secrets {
             v.zeroize();
         }
         self.0.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_secrets_construction_and_deref() {
+        let mut map = BTreeMap::new();
+        map.insert("API_KEY".to_string(), Zeroizing::new("secret123".to_string()));
+        let mut secrets = Secrets::new(map);
+        assert_eq!(&**secrets.get("API_KEY").unwrap(), "secret123");
+
+        secrets.insert("ANOTHER".to_string(), Zeroizing::new("val".to_string()));
+        assert_eq!(&**secrets.get("ANOTHER").unwrap(), "val");
+    }
+
+    #[test]
+    fn test_secrets_env_map_roundtrip() {
+        let mut env_map = EnvMap::new();
+        env_map.insert("DB_PASS".to_string(), "pass456".to_string());
+        let secrets = Secrets::from_env_map(&env_map);
+        let recovered = secrets.to_env_map();
+        assert_eq!(recovered.get("DB_PASS").unwrap(), "pass456");
+    }
+
+    #[test]
+    fn test_secrets_zeroize() {
+        let mut map = BTreeMap::new();
+        map.insert("TOKEN".to_string(), Zeroizing::new("token789".to_string()));
+        let mut secrets = Secrets::new(map);
+        assert_eq!(secrets.len(), 1);
+        secrets.zeroize();
+        assert!(secrets.is_empty());
     }
 }

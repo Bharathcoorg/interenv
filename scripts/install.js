@@ -8,15 +8,27 @@ const platformArch = `${process.platform}-${process.arch}`;
 const prebuildPath = path.join(__dirname, "..", "prebuilds", platformArch, binaryName);
 const releasePath = path.join(__dirname, "..", "target", "release", binaryName);
 
-if (fs.existsSync(prebuildPath) || fs.existsSync(releasePath)) {
+let foundBinary = null;
+if (fs.existsSync(prebuildPath)) {
+  foundBinary = prebuildPath;
+} else if (fs.existsSync(releasePath)) {
+  foundBinary = releasePath;
+}
+
+if (foundBinary) {
+  if (!isWin) {
+    try {
+      fs.accessSync(foundBinary, fs.constants.X_OK);
+    } catch {
+      try {
+        fs.chmodSync(foundBinary, 0o755);
+      } catch (err) {
+        console.warn(`⚠️ InterEnv: Unable to set executable permissions on ${foundBinary}: ${err.message}`);
+      }
+    }
+  }
   process.exit(0);
 }
 
-if (fs.existsSync(path.join(__dirname, "..", "Cargo.toml"))) {
-  console.log("ℹ️  InterEnv: Source repository detected. Run 'npm run build:rust' to compile local release binary.");
-  process.exit(0);
-} else {
-  console.error("❌ InterEnv: Missing native prebuilt binary for " + platformArch + ".");
-  console.error("Please download the release binary from https://github.com/Bharathcoorg/interenv/releases or compile via 'npm run build:rust'.");
-  process.exit(1);
-}
+console.error(`InterEnv: no prebuilt binary found for ${platformArch}. Run 'npm run build:rust' or download a release from https://github.com/Bharathcoorg/interenv/releases.`);
+process.exit(1);

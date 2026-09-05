@@ -11,7 +11,7 @@ fn test_runner_isolation_linux_environ() {
         "MY_TEST_SECRET".to_string(),
         Zeroizing::new("supersecret123".to_string()),
     );
-    let secrets = Secrets(map);
+    let secrets = Secrets::new(map);
 
     let program = "/bin/sh";
     let args = vec![
@@ -30,7 +30,7 @@ fn test_runner_isolation_linux_seccomp() {
     use interenv::runner::execute_with_env;
     use std::collections::BTreeMap;
 
-    let secrets = Secrets(BTreeMap::new());
+    let secrets = Secrets::new(BTreeMap::new());
     let program = "/bin/sh";
     let args = vec![
         "-c".to_string(),
@@ -48,7 +48,7 @@ fn test_runner_isolation_macos_sandbox() {
     use interenv::runner::execute_with_env;
     use std::collections::BTreeMap;
 
-    let secrets = Secrets(BTreeMap::new());
+    let secrets = Secrets::new(BTreeMap::new());
     let program = "/bin/sh";
     let args = vec![
         "-c".to_string(),
@@ -72,7 +72,7 @@ fn test_runner_isolation_windows() {
         "MY_TEST_SECRET".to_string(),
         Zeroizing::new("supersecret123".to_string()),
     );
-    let secrets = Secrets(map);
+    let secrets = Secrets::new(map);
 
     let program = "cmd.exe";
     let args = vec!["/c".to_string(), "echo %INTERENV_PROTECTED%".to_string()];
