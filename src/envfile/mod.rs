@@ -75,7 +75,10 @@ mod tests {
     #[test]
     fn test_secrets_construction_and_deref() {
         let mut map = BTreeMap::new();
-        map.insert("API_KEY".to_string(), Zeroizing::new("secret123".to_string()));
+        map.insert(
+            "API_KEY".to_string(),
+            Zeroizing::new("secret123".to_string()),
+        );
         let mut secrets = Secrets::new(map);
         assert_eq!(&**secrets.get("API_KEY").unwrap(), "secret123");
 
