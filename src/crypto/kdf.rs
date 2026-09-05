@@ -73,10 +73,23 @@ fn get_available_memory_mb() -> Result<u64, String> {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn get_available_memory_mb() -> Result<u64, String> {
     unsafe {
         let pages = libc::sysconf(libc::_SC_AVPHYS_PAGES);
+        let page_size = libc::sysconf(libc::_SC_PAGESIZE);
+        if pages > 0 && page_size > 0 {
+            Ok(((pages as u64) * (page_size as u64)) / (1024 * 1024))
+        } else {
+            Ok(1024)
+        }
+    }
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn get_available_memory_mb() -> Result<u64, String> {
+    unsafe {
+        let pages = libc::sysconf(libc::_SC_PHYS_PAGES);
         let page_size = libc::sysconf(libc::_SC_PAGESIZE);
         if pages > 0 && page_size > 0 {
             Ok(((pages as u64) * (page_size as u64)) / (1024 * 1024))

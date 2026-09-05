@@ -69,7 +69,7 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
             libc::setsid();
             if let Err(e) = crate::runner::linux_seccomp::install() {
                 std::env::set_var("INTERENV_SECCOMP_FAILED", &e);
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+                return Err(std::io::Error::other(e));
             }
             Ok(())
         });
@@ -82,7 +82,7 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
             libc::setsid();
             if let Err(e) = crate::runner::macos_sandbox::install() {
                 std::env::set_var("INTERENV_SANDBOX_FAILED", &e);
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+                return Err(std::io::Error::other(e));
             }
             Ok(())
         });
