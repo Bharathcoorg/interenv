@@ -52,6 +52,9 @@ pub fn shred_file<P: AsRef<Path>>(path: P) -> Result<(), String> {
             .open(p)
             .map_err(|e| format!("Cannot open file for shredding: {}", e))?;
 
+        file.seek(SeekFrom::Start(0))
+            .map_err(|e| format!("Seek error: {}", e))?;
+
         let mut random_buf = vec![0u8; file_len.min(64 * 1024)];
         let mut written = 0;
         while written < file_len {

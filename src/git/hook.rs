@@ -10,7 +10,7 @@ echo "🛡️  InterEnv: Scanning staged files and diff content for secret leaks
 
 # 1. Block any committed plaintext .env files (null-separated, filter=AM)
 # Allows .interenv.lock and example files
-LEAK_FILES=$(git diff --cached --name-only -z --diff-filter=AM | tr '\0' '\n' | grep -E '(^|/)\.?env(\.[A-Za-z0-9_-]+)*$' | grep -v -E '(\.example|\.sample|\.template|\.interenv\.lock)$')
+LEAK_FILES=$(git diff --cached --name-only -z --diff-filter=AM | tr '\0' '\n' | grep -i -E '(^|/)\.?env($|[^a-zA-Z0-9])' | grep -v -E '(\.example|\.sample|\.template|\.interenv\.lock)$' || true)
 
 if [ -n "$LEAK_FILES" ]; then
     printf "\033[1;31m❌ COMMIT ABORTED BY INTERENV:\033[0m\n"
@@ -21,9 +21,9 @@ if [ -n "$LEAK_FILES" ]; then
 fi
 
 # 2. Comprehensive pattern scan on DIFF CONTENT
-LEAK_REGEX='sk-[A-Za-z0-9_-]{20,}|sk-proj-[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{24,}|rk_live_[A-Za-z0-9]{24,}|ghp_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{82,}|gho_[A-Za-z0-9]{36,}|ghu_[A-Za-z0-9]{36,}|ghs_[A-Za-z0-9]{36,}|ghr_[A-Za-z0-9]{36,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|AIzaSy[A-Za-z0-9_-]{33}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|postgres(ql)?://[^\s:]+:[^\s@]+@|mysql://[^\s:]+:[^\s@]+@|mongodb(\+srv)?://[^\s:]+:[^\s@]+@|npm_[A-Za-z0-9]{36}|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}'
+LEAK_REGEX='sk-[A-Za-z0-9_-]{20,}|sk-proj-[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{24,}|rk_live_[A-Za-z0-9]{24,}|ghp_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{82,}|gho_[A-Za-z0-9]{36,}|ghu_[A-Za-z0-9]{36,}|ghs_[A-Za-z0-9]{36,}|ghr_[A-Za-z0-9]{36,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{33}|AIza|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|postgres(ql)?://[^\s:]+:[^\s@]+@|mysql://[^\s:]+:[^\s@]+@|mongodb(\+srv)?://[^\s:]+:[^\s@]+@|npm_[A-Za-z0-9]{36}|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}'
 
-DIFF_LEAKS=$(git diff --cached -U0 | grep -E "^[+]" | grep -v "^[+][+][+]" | grep -E "$LEAK_REGEX")
+DIFF_LEAKS=$(git diff --cached -U0 | grep -E "^[+]" | grep -v "^[+][+][+]" | grep -E "$LEAK_REGEX" || true)
 
 if [ -n "$DIFF_LEAKS" ]; then
     printf "\033[1;31m❌ COMMIT ABORTED BY INTERENV:\033[0m\n"
@@ -36,7 +36,7 @@ fi
 # 3. Check git submodules recursively if present
 if [ -f ".gitmodules" ]; then
     git submodule foreach --quiet --recursive '
-        SUB_LEAKS=$(git diff --cached --name-only -z --diff-filter=AM | tr "\0" "\n" | grep -E "(^|/)\.?env(\.[A-Za-z0-9_-]+)*$" | grep -v -E "(\.example|\.sample|\.template|\.interenv\.lock)$")
+        SUB_LEAKS=$(git diff --cached --name-only -z --diff-filter=AM | tr "\0" "\n" | grep -i -E "(^|/)\.?env($|[^a-zA-Z0-9])" | grep -v -E "(\.example|\.sample|\.template|\.interenv\.lock)$" || true)
         if [ -n "$SUB_LEAKS" ]; then
             echo "❌ Secret leak in submodule $name: $SUB_LEAKS"
             exit 1

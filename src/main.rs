@@ -81,8 +81,10 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
         }
     }
 
-    let raw_content = fs::read_to_string(&args.file)
-        .map_err(|e| format!("Failed to read {}: {}", args.file.display(), e))?;
+    let raw_content = Zeroizing::new(
+        fs::read_to_string(&args.file)
+            .map_err(|e| format!("Failed to read {}: {}", args.file.display(), e))?,
+    );
 
     let env_map = parse_dotenv(&raw_content);
     if env_map.is_empty() {
@@ -470,7 +472,7 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
 
     let (mut lock, secrets) = load_and_decrypt_env(Some(&lock_path))?;
     let env_map = secrets.to_env_map();
-    let dotenv_str = format_dotenv(&env_map);
+    let dotenv_str = Zeroizing::new(format_dotenv(&env_map));
 
     // Create an ephemeral temporary file in the OS secure temp dir (NOT in project cwd)
     let temp_dir = std::env::temp_dir();
@@ -535,8 +537,10 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
     }
 
     // Read modified contents
-    let modified_str = fs::read_to_string(&temp_path)
-        .map_err(|e| format!("Failed to read modified file: {}", e))?;
+    let modified_str = Zeroizing::new(
+        fs::read_to_string(&temp_path)
+            .map_err(|e| format!("Failed to read modified file: {}", e))?,
+    );
 
     let new_env_map = parse_dotenv(&modified_str);
 

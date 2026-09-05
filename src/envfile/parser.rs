@@ -2,17 +2,17 @@ use std::collections::BTreeMap;
 
 pub type EnvMap = BTreeMap<String, String>;
 
-/// Validate if a string is a valid environment variable key: `^[A-Za-z_][A-Za-z0-9_]*$`
+/// Validate if a string is a valid environment variable key: `^[A-Za-z_.][A-Za-z0-9_.]*$`
 pub fn is_valid_env_key(key: &str) -> bool {
     if key.is_empty() {
         return false;
     }
     let mut chars = key.chars();
     match chars.next() {
-        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
+        Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '.' => {}
         _ => return false,
     }
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
 }
 
 /// Parse a raw .env file string into key-value pairs.
@@ -238,5 +238,31 @@ UNQUOTED_WITH_HASH=my#value
         assert_eq!(map.get("SIMPLE_KEY").unwrap(), "hello world");
         assert_eq!(map.get("UNQUOTED").unwrap(), "my_value");
         assert_eq!(map.get("UNQUOTED_WITH_HASH").unwrap(), "my#value");
+    }
+
+    #[test]
+    fn test_parse_dotenv_escaped_quotes_and_backslashes() {
+        let input = "KEY=\"hello \\\\\\\"world\"\nBACKSLASH=\"backslash \\\\\"\n";
+        let parsed = parse_dotenv(input);
+        assert_eq!(parsed.get("KEY").unwrap(), "hello \\\"world");
+        assert_eq!(parsed.get("BACKSLASH").unwrap(), "backslash \\");
+    }
+
+    #[test]
+    fn test_parse_dotenv_env_file_variations() {
+        let input = "dev.env=val1\nmy.env=val2\n.Env=val3\n.ENV=val4\n";
+        let parsed = parse_dotenv(input);
+        assert_eq!(parsed.get("dev.env").unwrap(), "val1");
+        assert_eq!(parsed.get("my.env").unwrap(), "val2");
+        assert_eq!(parsed.get(".Env").unwrap(), "val3");
+        assert_eq!(parsed.get(".ENV").unwrap(), "val4");
+    }
+
+    #[test]
+    fn test_format_dotenv_header() {
+        let mut map = EnvMap::new();
+        map.insert("FOO".to_string(), "bar".to_string());
+        let formatted = format_dotenv(&map);
+        assert!(formatted.contains("Sealed by InterEnv"));
     }
 }

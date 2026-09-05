@@ -41,11 +41,13 @@ pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
     let entry = Entry::new(SERVICE_NAME, project_id)
         .map_err(|e| format!("Keyring initialization error: {}", e))?;
 
-    let key_hex_str = entry
-        .get_password()
-        .map_err(|e| format!("Failed to retrieve key from hardware/OS keyring: {}. Was it locked on another machine?", e))?;
+    let key_hex_str = Zeroizing::new(
+        entry
+            .get_password()
+            .map_err(|e| format!("Failed to retrieve key from hardware/OS keyring: {}. Was it locked on another machine?", e))?,
+    );
 
-    let key_hex = Zeroizing::new(key_hex_str);
+    let key_hex = key_hex_str;
     let mut bytes = Zeroizing::new(
         hex::decode(&*key_hex).map_err(|e| format!("Corrupted key in keyring: {}", e))?,
     );
