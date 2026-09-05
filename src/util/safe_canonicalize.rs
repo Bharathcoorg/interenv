@@ -76,6 +76,13 @@ pub fn safe_canonicalize(path: &Path) -> Result<PathBuf, String> {
                 }
                 std::path::Component::Normal(c) => {
                     resolved.push(c);
+                    #[cfg(target_os = "macos")]
+                    if resolved == Path::new("/var")
+                        || resolved == Path::new("/tmp")
+                        || resolved == Path::new("/etc")
+                    {
+                        continue;
+                    }
                     let meta = std::fs::symlink_metadata(&resolved)
                         .map_err(|e| format!("Path traversal error: {}", e))?;
                     if meta.file_type().is_symlink() {
