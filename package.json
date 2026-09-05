@@ -1,0 +1,53 @@
+{
+  "name": "interenv",
+  "version": "0.1.0",
+  "description": "Hardware-Enclave Protected Secrets for Terminal & Git (Zero Plaintext .env on Disk) by Interlayer",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "bin": {
+    "interenv": "bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build:rust": "cargo build --release",
+    "test": "cargo test"
+  },
+  "keywords": [
+    "secrets",
+    "env",
+    "dotenv",
+    "security",
+    "hardware-enclave",
+    "secure-enclave",
+    "tpm",
+    "touchid",
+    "windows-hello",
+    "zero-trust",
+    "terminal",
+    "cli",
+    "git",
+    "pre-commit",
+    "interlayer",
+    "developer-tools",
+    "rust"
+  ],
+  "author": "Bharath B R <bharathcoorg7@gmail.com>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Bharathcoorg/interenv.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Bharathcoorg/interenv/issues"
+  },
+  "homepage": "https://github.com/Bharathcoorg/interenv#readme"
+}
