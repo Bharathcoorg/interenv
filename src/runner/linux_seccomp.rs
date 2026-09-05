@@ -22,8 +22,8 @@ pub fn install() -> Result<(), String> {
 
     let filter = SeccompFilter::new(
         rules,
-        SeccompAction::Errno(1),
         SeccompAction::Allow,
+        SeccompAction::Errno(1),
         target_arch(),
     )
     .map_err(|e| format!("Seccomp filter init failed: {}", e))?;
