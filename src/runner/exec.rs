@@ -44,6 +44,9 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
             || upper == "LANG"
             || upper == "LC_ALL"
             || upper == "TERM"
+            || upper == "CARGO_HOME"
+            || upper == "RUSTUP_HOME"
+            || upper == "RUSTUP_TOOLCHAIN"
         {
             preserved.insert(k, v);
         }
