@@ -88,15 +88,9 @@ PORT=3000
     // 6. Test in-memory process execution with injected environment variables
     let secrets = Secrets::from_env_map(&recovered_map);
     #[cfg(windows)]
-    let (test_cmd, test_args) = (
-        "cmd.exe",
-        vec!["/c".to_string(), "echo %OPENAI_API_KEY%".to_string()],
-    );
+    let (test_cmd, test_args) = ("cmd.exe", vec!["/c".to_string(), "exit 0".to_string()]);
     #[cfg(not(windows))]
-    let (test_cmd, test_args) = (
-        "/bin/sh",
-        vec!["-c".to_string(), "echo $OPENAI_API_KEY".to_string()],
-    );
+    let (test_cmd, test_args) = ("true", Vec::<String>::new());
     let exit_code = execute_with_env(test_cmd, &test_args, &secrets).unwrap();
     assert_eq!(exit_code, 0);
 
