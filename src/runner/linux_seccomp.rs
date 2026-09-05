@@ -12,20 +12,6 @@ pub fn install() -> Result<(), String> {
         libc::SYS_process_vm_writev,
         libc::SYS_kcmp,
         libc::SYS_unshare,
-        libc::SYS_mount,
-        libc::SYS_umount2,
-        libc::SYS_pivot_root,
-        libc::SYS_chroot,
-        libc::SYS_setns,
-        libc::SYS_finit_module,
-        libc::SYS_init_module,
-        libc::SYS_delete_module,
-        libc::SYS_personality,
-        libc::SYS_acct,
-        libc::SYS_reboot,
-        libc::SYS_swapon,
-        libc::SYS_swapoff,
-        libc::SYS_bpf,
     ];
 
     for syscall in deny_syscalls {
