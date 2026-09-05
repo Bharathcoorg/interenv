@@ -5,6 +5,7 @@ use interenv::crypto::cipher::{decrypt_payload, encrypt_payload};
 use interenv::crypto::kdf::{derive_key_from_passphrase, generate_salt};
 use interenv::envfile::lockfile::{InterLock, KeyProviderType};
 use interenv::envfile::parser::{format_dotenv, parse_dotenv, EnvMap};
+use interenv::envfile::Secrets;
 use interenv::runner::execute_with_env;
 use interenv::shredder::shred_file;
 
@@ -69,7 +70,8 @@ PORT=3000
 
     let loaded_salt = hex::decode(&loaded_lock.kdf_salt_hex).unwrap();
     let recovered_key = derive_key_from_passphrase(passphrase, &loaded_salt).unwrap();
-    let decrypted_bytes = decrypt_payload(&loaded_lock.payload, &recovered_key).unwrap();
+    let decrypted_bytes =
+        decrypt_payload(&loaded_lock.payload, &recovered_key, &loaded_lock.cipher).unwrap();
 
     let recovered_map: EnvMap = serde_json::from_slice(&decrypted_bytes).unwrap();
     assert_eq!(
@@ -82,8 +84,9 @@ PORT=3000
     );
 
     // 6. Test in-memory process execution with injected environment variables
+    let secrets = Secrets::from_env_map(&recovered_map);
     let test_args = vec!["-V".to_string()];
-    let exit_code = execute_with_env("cargo", &test_args, &recovered_map).unwrap();
+    let exit_code = execute_with_env("cargo", &test_args, &secrets).unwrap();
     assert_eq!(exit_code, 0);
 
     // 7. Format dotenv string test

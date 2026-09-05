@@ -12,7 +12,8 @@ categories = ["command-line-utilities", "development-tools", "cryptography"]
 
 [dependencies]
 clap = { version = "4.5", features = ["derive", "cargo"] }
-aes-gcm = "0.10"
+chacha20poly1305 = "0.10"
+aead = "0.5"
 argon2 = "0.5"
 rand = "0.8"
 zeroize = { version = "1.8", features = ["derive"] }
@@ -27,6 +28,16 @@ tempfile = "3.10"
 hex = "0.4"
 dunce = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
+ctrlc = "3.4"
+regex = "1.10"
+atty = "0.2"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+signal-hook = "0.3"
+
+[dev-dependencies]
+proptest = "1"
 
 [profile.release]
 opt-level = 3
@@ -34,6 +45,11 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+overflow-checks = true
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+missing_debug_implementations = "warn"
 
 [[bin]]
 name = "interenv"

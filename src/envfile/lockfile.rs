@@ -3,31 +3,84 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::crypto::cipher::EncryptedPayload;
+use crate::crypto::cipher::{EncryptedPayload, CIPHER_XCHACHA20_POLY1305};
+use crate::crypto::kdf::{OWASP_ARGON2_ITERATIONS, OWASP_ARGON2_MEM_KIB, OWASP_ARGON2_PARALLELISM};
 
 pub const DEFAULT_LOCK_FILE: &str = ".interenv.lock";
 pub const LEGACY_LOCK_FILE: &str = "interenv.lock";
+pub const CURRENT_LOCK_VERSION: &str = "2.0";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyProviderType {
     /// Stored in OS Hardware Enclave / Secure Credential Store (TouchID, TPM, Windows Credential Manager)
+    #[default]
     HardwareEnclave,
     /// Encrypted with an Argon2id derived passphrase (for CI/CD or headless environments)
     Passphrase,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InterLock {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KdfParams {
+    pub algo: String,
+    pub mem_kib: u32,
+    pub iterations: u32,
+    pub parallelism: u32,
     pub version: String,
+}
+
+impl Default for KdfParams {
+    fn default() -> Self {
+        Self {
+            algo: "argon2id".to_string(),
+            mem_kib: OWASP_ARGON2_MEM_KIB,
+            iterations: OWASP_ARGON2_ITERATIONS,
+            parallelism: OWASP_ARGON2_PARALLELISM,
+            version: "0x13".to_string(),
+        }
+    }
+}
+
+fn default_version() -> String {
+    "1.0".to_string()
+}
+
+fn default_cipher() -> String {
+    "aes-256-gcm".to_string()
+}
+
+fn default_payload() -> EncryptedPayload {
+    EncryptedPayload {
+        nonce_hex: String::new(),
+        ciphertext_hex: String::new(),
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InterLock {
+    #[serde(default = "default_version")]
+    pub version: String,
+    #[serde(default)]
     pub project_id: String,
+    #[serde(default)]
     pub project_name: String,
+    #[serde(default)]
     pub key_provider: KeyProviderType,
+    #[serde(default)]
     pub kdf_salt_hex: String,
+    #[serde(default)]
+    pub kdf: KdfParams,
+    #[serde(default = "default_cipher")]
+    pub cipher: String,
+    #[serde(default = "default_payload")]
     pub payload: EncryptedPayload,
+    #[serde(default)]
     pub keys_count: usize,
+    #[serde(default)]
     pub key_names: Vec<String>,
+    #[serde(default)]
     pub created_at: String,
+    #[serde(default)]
     pub updated_at: String,
 }
 
@@ -42,11 +95,13 @@ impl InterLock {
     ) -> Self {
         let now = Utc::now().to_rfc3339();
         Self {
-            version: "1.0".to_string(),
+            version: CURRENT_LOCK_VERSION.to_string(),
             project_id,
             project_name,
             key_provider,
             kdf_salt_hex,
+            kdf: KdfParams::default(),
+            cipher: CIPHER_XCHACHA20_POLY1305.to_string(),
             keys_count: key_names.len(),
             key_names,
             payload,

@@ -11,26 +11,28 @@ pub fn store_key(
     use_passphrase: bool,
     custom_passphrase: Option<&str>,
     salt: &[u8],
-) -> Result<KeyProviderType, String> {
+) -> Result<(KeyProviderType, Zeroizing<[u8; 32]>), String> {
     if use_passphrase {
-        // In passphrase mode, the key is already derived from passphrase + salt;
-        // nothing is stored in keyring!
-        Ok(KeyProviderType::Passphrase)
+        Ok((KeyProviderType::Passphrase, Zeroizing::new(*master_key)))
     } else {
-        // Attempt hardware enclave store
         match keyring_backend::store_key(project_id, master_key) {
-            Ok(_) => Ok(KeyProviderType::HardwareEnclave),
+            Ok(_) => Ok((
+                KeyProviderType::HardwareEnclave,
+                Zeroizing::new(*master_key),
+            )),
             Err(e) => {
-                // If hardware store fails (e.g. headless linux container), prompt fallback
-                eprintln!("⚠️  Hardware enclave storage unavailable ({}). Falling back to passphrase protection...", e);
+                eprintln!(
+                    "⚠️  Hardware enclave storage unavailable ({}). Falling back to passphrase protection...",
+                    e
+                );
                 let pass = match custom_passphrase {
-                    Some(p) => p.to_string(),
+                    Some(p) => Zeroizing::new(p.to_string()),
                     None => fallback::prompt_or_get_passphrase(
                         "Enter a passphrase to lock project secrets",
                     )?,
                 };
-                let _ = fallback::derive_passphrase_key(&pass, salt)?;
-                Ok(KeyProviderType::Passphrase)
+                let derived = fallback::derive_passphrase_key(&pass, salt)?;
+                Ok((KeyProviderType::Passphrase, derived))
             }
         }
     }
@@ -47,11 +49,10 @@ pub fn retrieve_key(
             match keyring_backend::retrieve_key(project_id) {
                 Ok(k) => Ok(k),
                 Err(err) => {
-                    // Offer fallback prompt if key is missing in local enclave (e.g. cloned repo on another machine)
-                    eprintln!("⚠️  Hardware key not found in local enclave: {}.", err);
-                    eprintln!("💡 If this repo was cloned from another machine, enter the unlock passphrase:");
-                    let pass = fallback::prompt_or_get_passphrase("Project unlock passphrase")?;
-                    fallback::derive_passphrase_key(&pass, salt)
+                    Err(format!(
+                        "Hardware key not found in local OS enclave: {}. This lockfile was sealed with a machine-bound hardware key. To share projects across machines or CI/CD, seal with 'interenv lock --passphrase'.",
+                        err
+                    ))
                 }
             }
         }

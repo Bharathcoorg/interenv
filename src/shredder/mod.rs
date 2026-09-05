@@ -1,8 +1,27 @@
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
-use std::path::Path;
+use std::io::{Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+
+/// RAII Guard that automatically shreds and unlinks a sensitive temporary file on drop.
+#[derive(Debug)]
+pub struct TempFileGuard {
+    pub path: PathBuf,
+}
+
+impl TempFileGuard {
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+}
+
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        let _ = shred_file(&self.path);
+        let _ = fs::remove_file(&self.path);
+    }
+}
 
 /// Securely overwrite and delete a sensitive plaintext file from disk.
 /// Performs a 3-pass DoD 5220.22-M style overwrite:
@@ -61,6 +80,9 @@ fn overwrite_pattern(path: &Path, file_len: usize, byte_val: u8) -> Result<(), S
         .open(path)
         .map_err(|e| format!("Cannot open file: {}", e))?;
 
+    file.seek(SeekFrom::Start(0))
+        .map_err(|e| format!("Seek error: {}", e))?;
+
     let buf_size = file_len.min(64 * 1024);
     let buf = vec![byte_val; buf_size];
 
@@ -89,5 +111,21 @@ mod tests {
         assert!(path.exists());
         shred_file(&path).unwrap();
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn test_temp_file_guard() {
+        let temp = NamedTempFile::new().unwrap();
+        let path = temp.path().to_path_buf();
+        assert!(path.exists());
+
+        {
+            let _guard = TempFileGuard::new(path.clone());
+        } // guard drops here
+
+        assert!(
+            !path.exists(),
+            "File must be deleted after TempFileGuard drops"
+        );
     }
 }

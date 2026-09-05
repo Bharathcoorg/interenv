@@ -31,6 +31,12 @@ pub enum Commands {
     /// 📊 Inspect repository security status and hardware enclave binding
     Status,
 
+    /// 🩺 Diagnostic doctor to inspect platform hardware enclave, KDF, cipher, and filesystem CoW shred safety
+    Doctor,
+
+    /// ℹ️  Display current InterEnv version and cryptographic engine specs
+    Version,
+
     /// 🛡️  Manage Git pre-commit hooks to prevent accidental plaintext leaks
     Hook(HookArgs),
 
@@ -73,6 +79,10 @@ pub struct EditArgs {
     /// Path to the lockfile (defaults to searching current and parent directories)
     #[arg(short, long)]
     pub lockfile: Option<PathBuf>,
+
+    /// Allow saving even if all environment variables were emptied
+    #[arg(short, long)]
+    pub force: bool,
 }
 
 #[derive(Args, Debug)]
@@ -84,6 +94,10 @@ pub struct ShowArgs {
     /// Output in standard .env format instead of formatted table
     #[arg(long)]
     pub raw: bool,
+
+    /// Output clean JSON format (ideal for programmatic wrappers and Node.js SDK)
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args, Debug)]

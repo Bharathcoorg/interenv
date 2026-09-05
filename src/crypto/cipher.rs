@@ -1,29 +1,32 @@
-use aes_gcm::aead::{Aead, KeyInit};
-use aes_gcm::{Aes256Gcm, Key, Nonce};
+use chacha20poly1305::aead::{Aead, KeyInit};
+use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+pub const CIPHER_XCHACHA20_POLY1305: &str = "xchacha20-poly1305";
+pub const CIPHER_AES_256_GCM_LEGACY: &str = "aes-256-gcm";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EncryptedPayload {
-    /// 12-byte initialization vector / nonce (hex-encoded in JSON)
+    /// 24-byte initialization vector / nonce for XChaCha20 (hex-encoded)
     pub nonce_hex: String,
-    /// Ciphertext with appended 16-byte authentication tag (hex-encoded in JSON)
+    /// Ciphertext with appended 16-byte Poly1305 authentication tag (hex-encoded)
     pub ciphertext_hex: String,
 }
 
-/// Encrypt raw plaintext bytes using AES-256-GCM.
+/// Encrypt raw plaintext bytes using XChaCha20-Poly1305 with a 24-byte random nonce.
 pub fn encrypt_payload(plaintext: &[u8], key: &[u8; 32]) -> Result<EncryptedPayload, String> {
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
 
-    let mut nonce_bytes = [0u8; 12];
+    let mut nonce_bytes = [0u8; 24];
     OsRng.fill_bytes(&mut nonce_bytes);
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = XNonce::from_slice(&nonce_bytes);
 
     let ciphertext = cipher
         .encrypt(nonce, plaintext)
-        .map_err(|e| format!("AES-256-GCM encryption error: {}", e))?;
+        .map_err(|e| format!("XChaCha20-Poly1305 encryption error: {}", e))?;
 
     Ok(EncryptedPayload {
         nonce_hex: hex::encode(nonce_bytes),
@@ -31,23 +34,33 @@ pub fn encrypt_payload(plaintext: &[u8], key: &[u8; 32]) -> Result<EncryptedPayl
     })
 }
 
-/// Decrypt ciphertext using AES-256-GCM, returning zeroized plaintext buffer.
+/// Decrypt ciphertext using XChaCha20-Poly1305, returning zeroized plaintext buffer.
 pub fn decrypt_payload(
     payload: &EncryptedPayload,
     key: &[u8; 32],
+    cipher_name: &str,
 ) -> Result<Zeroizing<Vec<u8>>, String> {
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    if cipher_name == CIPHER_AES_256_GCM_LEGACY {
+        return Err(
+            "Lockfile uses legacy AES-256-GCM cipher. Please re-lock project with InterEnv v2.0+ (interenv lock --force)".to_string(),
+        );
+    }
+
+    let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
 
     let nonce_bytes =
         hex::decode(&payload.nonce_hex).map_err(|e| format!("Invalid nonce hex: {}", e))?;
-    if nonce_bytes.len() != 12 {
-        return Err("Nonce must be 12 bytes".into());
+    if nonce_bytes.len() != 24 {
+        return Err(format!(
+            "Invalid nonce length: expected 24 bytes for XChaCha20, got {}",
+            nonce_bytes.len()
+        ));
     }
 
     let ciphertext = hex::decode(&payload.ciphertext_hex)
         .map_err(|e| format!("Invalid ciphertext hex: {}", e))?;
 
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = XNonce::from_slice(&nonce_bytes);
     let decrypted = cipher
         .decrypt(nonce, ciphertext.as_ref())
         .map_err(|_| "Decryption failed: integrity check failed or invalid key".to_string())?;
@@ -64,7 +77,8 @@ mod tests {
         let key = [42u8; 32];
         let secret = b"DATABASE_URL=postgres://user:pass@localhost:5432/db";
         let encrypted = encrypt_payload(secret, &key).unwrap();
-        let decrypted = decrypt_payload(&encrypted, &key).unwrap();
+        assert_eq!(encrypted.nonce_hex.len(), 48); // 24 bytes * 2
+        let decrypted = decrypt_payload(&encrypted, &key, CIPHER_XCHACHA20_POLY1305).unwrap();
         assert_eq!(&*decrypted, secret);
     }
 
@@ -79,6 +93,6 @@ mod tests {
         bytes[0] ^= 0xFF;
         encrypted.ciphertext_hex = hex::encode(bytes);
 
-        assert!(decrypt_payload(&encrypted, &key).is_err());
+        assert!(decrypt_payload(&encrypted, &key, CIPHER_XCHACHA20_POLY1305).is_err());
     }
 }
