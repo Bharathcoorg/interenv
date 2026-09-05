@@ -1,9 +1,9 @@
 use std::fs;
 use tempfile::TempDir;
 
-use interenv::crypto::cipher::{decrypt_payload, encrypt_payload};
+use interenv::crypto::cipher::{decrypt_payload, encrypt_payload, CIPHER_XCHACHA20_POLY1305};
 use interenv::crypto::kdf::{derive_key_from_passphrase, generate_salt};
-use interenv::envfile::lockfile::{InterLock, KeyProviderType};
+use interenv::envfile::lockfile::{InterLock, KdfParams, KeyProviderType};
 use interenv::envfile::parser::{format_dotenv, parse_dotenv, EnvMap};
 use interenv::envfile::Secrets;
 use interenv::runner::execute_with_env;
@@ -51,6 +51,8 @@ PORT=3000
         hex::encode(salt),
         payload,
         key_names,
+        KdfParams::default(),
+        CIPHER_XCHACHA20_POLY1305.to_string(),
     );
 
     lock.save(&lock_path).unwrap();

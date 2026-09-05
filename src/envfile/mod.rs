@@ -48,16 +48,22 @@ impl DerefMut for Secrets {
 
 impl Drop for Secrets {
     fn drop(&mut self) {
-        for v in self.0.values_mut() {
+        for (k, v) in self.0.iter_mut() {
+            let k_slice = unsafe { std::slice::from_raw_parts_mut(k.as_ptr() as *mut u8, k.len()) };
+            k_slice.zeroize();
             v.zeroize();
         }
+        self.0.clear();
     }
 }
 
 impl Zeroize for Secrets {
     fn zeroize(&mut self) {
-        for v in self.0.values_mut() {
+        for (k, v) in self.0.iter_mut() {
+            let k_slice = unsafe { std::slice::from_raw_parts_mut(k.as_ptr() as *mut u8, k.len()) };
+            k_slice.zeroize();
             v.zeroize();
         }
+        self.0.clear();
     }
 }

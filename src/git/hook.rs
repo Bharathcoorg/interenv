@@ -71,7 +71,8 @@ pub fn find_git_dir(start_dir: &Path) -> Option<PathBuf> {
     }
 
     // Fallback: directory walking
-    let mut curr = dunce::canonicalize(start_dir).unwrap_or_else(|_| start_dir.to_path_buf());
+    let mut curr =
+        crate::util::safe_canonicalize(start_dir).unwrap_or_else(|_| start_dir.to_path_buf());
     loop {
         let git_entry = curr.join(".git");
         if git_entry.is_dir() {

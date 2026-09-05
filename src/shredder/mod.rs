@@ -70,10 +70,92 @@ pub fn shred_file<P: AsRef<Path>>(path: P) -> Result<(), String> {
     // Truncate to zero bytes
     let _ = OpenOptions::new().write(true).truncate(true).open(p);
 
+    platform_post_shred(p)?;
+
     // Delete file from disk
     fs::remove_file(p)
         .map_err(|e| format!("Failed to delete shredded file {}: {}", p.display(), e))?;
 
+    Ok(())
+}
+
+#[cfg(windows)]
+fn platform_post_shred(path: &Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{
+        FindClose, FindFirstStreamW, FindNextStreamW, SetEndOfFile, SetFileValidData,
+        WIN32_FIND_STREAM_DATA,
+    };
+
+    if let Ok(file) = OpenOptions::new().write(true).open(path) {
+        let handle = HANDLE(file.as_raw_handle() as _);
+        unsafe {
+            let _ = SetFileValidData(handle, 0);
+            let _ = SetEndOfFile(handle);
+        }
+    }
+
+    let mut wide_path: Vec<u16> = path.as_os_str().encode_wide().collect();
+    wide_path.push(0);
+
+    unsafe {
+        let mut find_data = WIN32_FIND_STREAM_DATA::default();
+        let handle_res = FindFirstStreamW(
+            windows::core::PCWSTR(wide_path.as_ptr()),
+            windows::Win32::Storage::FileSystem::FindStreamInfoStandard,
+            &mut find_data as *mut _ as _,
+            0,
+        );
+
+        if let Ok(stream_handle) = handle_res {
+            let mut more = true;
+            while more {
+                let stream_name = String::from_utf16_lossy(&find_data.cStreamName);
+                let trimmed_name = stream_name.trim_matches('\0');
+                if !trimmed_name.is_empty() && trimmed_name != "::$DATA" {
+                    let ads_path_str = format!("{}:{}", path.display(), trimmed_name);
+                    let _ = std::fs::remove_file(&ads_path_str);
+                }
+                more = FindNextStreamW(stream_handle, &mut find_data as *mut _ as _).is_ok();
+            }
+            let _ = FindClose(stream_handle);
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn platform_post_shred(path: &Path) -> Result<(), String> {
+    use std::os::unix::io::AsRawFd;
+    if let Ok(file) = OpenOptions::new().write(true).open(path) {
+        let fd = file.as_raw_fd();
+        let len = file.metadata().map(|m| m.len() as i64).unwrap_or(0);
+        if len > 0 {
+            unsafe {
+                let _ = libc::fallocate(fd, 0x03, 0, len);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn platform_post_shred(path: &Path) -> Result<(), String> {
+    use std::os::unix::io::AsRawFd;
+    if let Ok(file) = OpenOptions::new().write(true).open(path) {
+        let fd = file.as_raw_fd();
+        unsafe {
+            let _ = libc::fcntl(fd, 51);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn platform_post_shred(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 

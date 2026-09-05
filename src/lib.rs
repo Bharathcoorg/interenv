@@ -10,6 +10,7 @@ pub mod envfile;
 pub mod git;
 pub mod runner;
 pub mod shredder;
+pub mod util;
 
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -17,11 +18,12 @@ use std::path::Path;
 pub use envfile::lockfile::InterLock;
 pub use envfile::parser::EnvMap;
 pub use envfile::Secrets;
+pub use util::safe_canonicalize;
 
 /// Compute a stable project ID bound to repository anchors (.git/HEAD, manifests)
 /// ensuring folder renaming keeps the same ID if the repo is unchanged.
 pub fn compute_project_id(cwd: &Path) -> (String, String) {
-    let canonical = dunce::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let canonical = safe_canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
     let folder_name = canonical
         .file_name()
         .and_then(|n| n.to_str())

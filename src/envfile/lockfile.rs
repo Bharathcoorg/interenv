@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::crypto::cipher::{EncryptedPayload, CIPHER_XCHACHA20_POLY1305};
+use crate::crypto::cipher::EncryptedPayload;
 use crate::crypto::kdf::{OWASP_ARGON2_ITERATIONS, OWASP_ARGON2_MEM_KIB, OWASP_ARGON2_PARALLELISM};
 
 pub const DEFAULT_LOCK_FILE: &str = ".interenv.lock";
@@ -85,6 +85,7 @@ pub struct InterLock {
 }
 
 impl InterLock {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         project_id: String,
         project_name: String,
@@ -92,6 +93,8 @@ impl InterLock {
         kdf_salt_hex: String,
         payload: EncryptedPayload,
         key_names: Vec<String>,
+        kdf: KdfParams,
+        cipher: String,
     ) -> Self {
         let now = Utc::now().to_rfc3339();
         Self {
@@ -100,8 +103,8 @@ impl InterLock {
             project_name,
             key_provider,
             kdf_salt_hex,
-            kdf: KdfParams::default(),
-            cipher: CIPHER_XCHACHA20_POLY1305.to_string(),
+            kdf,
+            cipher,
             keys_count: key_names.len(),
             key_names,
             payload,
@@ -135,7 +138,8 @@ impl InterLock {
 
     /// Discover `.interenv.lock` in the current directory or by walking up parent directories.
     pub fn find_lockfile(start_dir: &Path) -> Option<PathBuf> {
-        let mut curr = dunce::canonicalize(start_dir).unwrap_or_else(|_| start_dir.to_path_buf());
+        let mut curr =
+            crate::util::safe_canonicalize(start_dir).unwrap_or_else(|_| start_dir.to_path_buf());
         loop {
             let primary = curr.join(DEFAULT_LOCK_FILE);
             if primary.exists() && primary.is_file() {

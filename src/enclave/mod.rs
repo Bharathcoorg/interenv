@@ -4,6 +4,8 @@ pub mod keyring_backend;
 use crate::envfile::lockfile::KeyProviderType;
 use zeroize::Zeroizing;
 
+pub use keyring_backend::WrappedMasterKey;
+
 /// Store the master key using either OS hardware enclave keyring or passphrase fallback.
 pub fn store_key(
     project_id: &str,

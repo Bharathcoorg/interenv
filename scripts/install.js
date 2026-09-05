@@ -1,8 +1,3 @@
-/**
- * InterEnv postinstall script
- * Verifies binary presence or guides the user on building from source.
- */
-
 const path = require("path");
 const fs = require("fs");
 
@@ -14,9 +9,14 @@ const prebuildPath = path.join(__dirname, "..", "prebuilds", platformArch, binar
 const releasePath = path.join(__dirname, "..", "target", "release", binaryName);
 
 if (fs.existsSync(prebuildPath) || fs.existsSync(releasePath)) {
-  // Prebuilt binary found
   process.exit(0);
 }
 
-// Otherwise inform user
-console.log("ℹ️  InterEnv: Installed via npm. To compile release binary locally, run 'npm run build:rust'.");
+if (fs.existsSync(path.join(__dirname, "..", "Cargo.toml"))) {
+  console.log("ℹ️  InterEnv: Source repository detected. Run 'npm run build:rust' to compile local release binary.");
+  process.exit(0);
+} else {
+  console.error("❌ InterEnv: Missing native prebuilt binary for " + platformArch + ".");
+  console.error("Please download the release binary from https://github.com/Bharathcoorg/interenv/releases or compile via 'npm run build:rust'.");
+  process.exit(1);
+}

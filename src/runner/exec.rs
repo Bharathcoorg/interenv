@@ -62,7 +62,17 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
     // Set a marker indicator so tools can detect they are protected by interenv
     cmd.env("INTERENV_PROTECTED", "1");
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        cmd.pre_exec(|| {
+            libc::setsid();
+            libc::prctl(38, 1, 0, 0, 0); // PR_SET_NO_NEW_PRIVS
+            Ok(())
+        });
+    }
+
+    #[cfg(all(unix, not(target_os = "linux")))]
     unsafe {
         use std::os::unix::process::CommandExt;
         cmd.pre_exec(|| {
@@ -77,6 +87,49 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
             program, e
         )
     })?;
+
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::JobObjects::{
+            AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+            SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        };
+        use windows::Win32::System::Threading::{
+            OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
+        };
+
+        let job_res = unsafe { CreateJobObjectW(None, None) };
+        match job_res {
+            Ok(job) => {
+                let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+                info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                let set_res = unsafe {
+                    SetInformationJobObject(
+                        job,
+                        JobObjectExtendedLimitInformation,
+                        &info as *const _ as _,
+                        std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                    )
+                };
+                if set_res.is_ok() {
+                    let process_handle = unsafe {
+                        OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, child.id())
+                    };
+                    if let Ok(p_handle) = process_handle {
+                        let _ = unsafe { AssignProcessToJobObject(job, p_handle) };
+                        let _ = unsafe { windows::Win32::Foundation::CloseHandle(p_handle) };
+                    }
+                }
+            }
+            Err(_) => {
+                if std::env::var("INTERENV_UNSAFE").unwrap_or_default() != "1" {
+                    eprintln!("⚠️ Secret isolation unavailable on this system; child may read its own environment. Set INTERENV_UNSAFE=1 to suppress this warning.");
+                    std::process::exit(75);
+                }
+            }
+        }
+    }
 
     let child_pid = Arc::new(AtomicU32::new(child.id()));
     let pid_clone = child_pid.clone();

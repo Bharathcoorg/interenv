@@ -15,13 +15,15 @@ use std::os::unix::fs::PermissionsExt;
 use interenv::cli::{
     Cli, Commands, EditArgs, HookAction, HookArgs, LockArgs, RunArgs, ShowArgs, ShredArgs,
 };
-use interenv::crypto::cipher::{decrypt_payload, encrypt_payload, CIPHER_XCHACHA20_POLY1305};
+use interenv::crypto::cipher::{
+    decrypt_payload, encrypt_payload, CIPHER_AES_256_GCM_LEGACY, CIPHER_XCHACHA20_POLY1305,
+};
 use interenv::crypto::kdf::{
     derive_key_from_passphrase, generate_random_key, generate_salt, OWASP_ARGON2_ITERATIONS,
     OWASP_ARGON2_MEM_KIB, OWASP_ARGON2_PARALLELISM,
 };
 use interenv::enclave::{self, fallback};
-use interenv::envfile::lockfile::{InterLock, KeyProviderType, CURRENT_LOCK_VERSION};
+use interenv::envfile::lockfile::{InterLock, KdfParams, KeyProviderType, CURRENT_LOCK_VERSION};
 use interenv::envfile::parser::{format_dotenv, parse_dotenv};
 use interenv::envfile::Secrets;
 use interenv::git::hook::{find_git_dir, install_pre_commit_hook, uninstall_pre_commit_hook};
@@ -126,6 +128,8 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
         salt_hex,
         payload,
         key_names.clone(),
+        KdfParams::default(),
+        CIPHER_XCHACHA20_POLY1305.to_string(),
     );
 
     lock.save(&args.output)?;
@@ -192,7 +196,7 @@ fn load_and_decrypt_env(lockfile_path: Option<&Path>) -> Result<(InterLock, Secr
         })?,
     };
 
-    let lock = InterLock::load(&path)?;
+    let mut lock = InterLock::load(&path)?;
     let salt = hex::decode(&lock.kdf_salt_hex)
         .map_err(|e| format!("Invalid salt hex in lockfile: {}", e))?;
 
@@ -202,6 +206,20 @@ fn load_and_decrypt_env(lockfile_path: Option<&Path>) -> Result<(InterLock, Secr
     let env_map: std::collections::BTreeMap<String, String> =
         serde_json::from_slice(&decrypted_bytes)
             .map_err(|e| format!("Decrypted data corruption: {}", e))?;
+
+    // If lockfile used legacy AES-256-GCM cipher or v1.0, transparently re-encrypt with XChaCha20
+    if lock.cipher == CIPHER_AES_256_GCM_LEGACY || lock.version == "1.0" {
+        let json_bytes = Zeroizing::new(
+            serde_json::to_vec(&env_map).map_err(|e| format!("Serialization error: {}", e))?,
+        );
+        if let Ok(new_payload) = encrypt_payload(&json_bytes, &master_key) {
+            lock.payload = new_payload;
+            lock.cipher = CIPHER_XCHACHA20_POLY1305.to_string();
+            lock.version = CURRENT_LOCK_VERSION.to_string();
+            lock.updated_at = chrono::Utc::now().to_rfc3339();
+            let _ = lock.save(&path);
+        }
+    }
 
     let secrets = Secrets::from_env_map(&env_map);
     Ok((lock, secrets))
@@ -258,15 +276,12 @@ fn handle_show(args: ShowArgs) -> Result<(), String> {
         if !args.reveal {
             println!(
                 "{}",
-                "# Use --reveal to display unmasked secret values".yellow()
+                "# Notice: Raw export mode requires --reveal to output unmasked values. Pass --reveal to view.".yellow()
             );
+            return Ok(());
         }
         for (k, v) in secrets.iter() {
-            if args.reveal {
-                println!("{}={}", k, v.as_str());
-            } else {
-                println!("{}={}", k, mask_value(v));
-            }
+            println!("{}={}", k, v.as_str());
         }
     } else {
         println!("{:<30} {:<30}", "KEY".bold(), "VALUE".bold());
@@ -514,6 +529,15 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
         process::exit(130);
     });
 
+    #[cfg(unix)]
+    let shutdown_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    #[cfg(unix)]
+    {
+        use signal_hook::consts::signal::{SIGHUP, SIGTERM};
+        let _ = signal_hook::flag::register(SIGHUP, std::sync::Arc::clone(&shutdown_flag));
+        let _ = signal_hook::flag::register(SIGTERM, std::sync::Arc::clone(&shutdown_flag));
+    }
+
     // Determine editor
     let editor = env::var("EDITOR")
         .or_else(|_| env::var("VISUAL"))
@@ -531,6 +555,13 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
         .arg(&temp_path)
         .status()
         .map_err(|e| format!("Failed to launch editor '{}': {}", editor, e))?;
+
+    #[cfg(unix)]
+    if shutdown_flag.load(std::sync::atomic::Ordering::SeqCst) {
+        let _ = shred_file(&temp_path);
+        let _ = fs::remove_file(&temp_path);
+        return Err("Edit aborted: received termination signal.".into());
+    }
 
     if !status.success() {
         return Err("Editor exited with error. Changes were discarded.".into());
@@ -569,6 +600,7 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
     let new_payload = encrypt_payload(&json_bytes, &master_key)?;
 
     lock.payload = new_payload;
+    lock.kdf = KdfParams::default();
     lock.cipher = CIPHER_XCHACHA20_POLY1305.to_string();
     lock.version = CURRENT_LOCK_VERSION.to_string();
     lock.keys_count = new_env_map.len();

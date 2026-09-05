@@ -7,7 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased] - Security Hardening
+## [Unreleased]
+
+### v0.2.0 Security Hardening (in progress)
+- **Real Sandbox Isolation for Child Processes ([Audit Finding H1.8](#fix-1--real-sandbox-isolation-for-child-processes))**:
+  - Windows: Attached spawned child processes to a dedicated Windows Job Object configured with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` to ensure child processes terminate automatically if parent terminates or crashes.
+  - Linux: Implemented `prctl(PR_SET_NO_NEW_PRIVS, 1)` and seccomp BPF syscall filter permitting standard runtime calls while denying privilege escalation and process memory inspection (`ptrace`, `process_vm_readv`, `process_vm_writev`, `unshare`, `bpf`).
+  - macOS: Integrated Apple Sandbox profile denying child data exfiltration outside working directory and `/dev/null`/`tty`.
+  - Fail-Closed Policy: Setup failures emit warnings and terminate with code 75 (EX_TEMPFAIL) unless bypassed via `INTERENV_UNSAFE=1`.
+- **Real TPM / Secure Enclave KEK Wrapping ([Audit Finding H1.5](#fix-2--real-tpmsecure-enclave-backed-kek))**:
+  - Replaced XOR stopgap with platform-native Hardware Key Encryption Keys (KEK).
+  - Windows: Implemented DPAPI / TPM-backed master key protection via `CryptProtectData` with project entropy binding.
+  - macOS: Added `security-framework` integration using hardware-backed SecKey.
+  - Linux: Added TPM 2.0 integration via `tss-esapi` with graceful XOR fallback for non-TPM environments.
+  - Updated API to return `WrappedMasterKey { kek_id, wrapped }` and zeroized plaintext master keys.
+- **True Disk Wipe for CoW / SSD Media ([Audit Finding H1.9](#fix-3--true-disk-wipe-for-cowssd))**:
+  - Implemented `platform_post_shred` following 3-pass DoD 5220.22-M overwrite.
+  - Windows: Invoked `SetFileValidData(0)` and `SetEndOfFile` to decommit filesystem pages, plus Alternate Data Stream (ADS) enumeration via `FindFirstStreamW`/`FindNextStreamW` and individual stream destruction.
+  - Linux: Applied `fallocate(FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE)` to release physical extents and warned if TRIM discard granularity is 0.
+  - macOS: Issued `fcntl(fd, F_FULLFSYNC)` to force disk controller cache flushes and warned on APFS copy-on-write limitations.
+- **TOCTOU Symlink Protection via `safe_canonicalize` ([Audit Finding H1.10](#fix-4--toctou-symlink-protection))**:
+  - Removed vulnerable `dunce::canonicalize` dependency across all modules (`src/lib.rs`, `src/envfile/lockfile.rs`, `src/git/hook.rs`).
+  - Created `src/util/safe_canonicalize.rs` providing atomic symlink traversal without race conditions.
+  - Windows: Evaluated normalized handle targets via `GetFinalPathNameByHandleW` with `FILE_FLAG_OPEN_REPARSE_POINT` and rejected paths containing symlink reparse points.
+  - Linux / macOS: Traversed directory hierarchy ensuring symlinks are rejected and resolution remains strictly within target boundaries.
+- **Deepscan Enhancements**:
+  - Backward compatibility & migration: Transparently decrypted legacy AES-256-GCM v1.0 lockfiles and re-encrypted them in place to XChaCha20-Poly1305.
+  - Memory zeroization: Enhanced `Secrets(Zeroizing<BTreeMap<String, Zeroizing<String>>>)` to scrub both key and value buffers from heap memory on drop.
+  - Configurable lockfile generation: Updated `InterLock::new` to accept custom `KdfParams` and cipher algorithm parameters.
+  - Terminal signal handling: Registered SIGHUP and SIGTERM handlers during `interenv edit` on Unix to guarantee immediate file shredding on abrupt terminal disconnection.
+  - Prebuild installer: Implemented functional prebuilt binary detection and installer in Node SDK `scripts/install.js`.
+  - UX clarity: Streamlined `interenv show --raw` to reject unrevealed masking requests with an informative guidance notice.
 
 Summary of fixes from the InterEnv v0.1.0 Security Audit across cryptography, process isolation, schema migration, and pre-commit protection.
 
