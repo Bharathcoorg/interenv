@@ -594,7 +594,11 @@ pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
             unwrap_key_platform(project_id, &wrapped)?
         }
         #[cfg(not(feature = "tpm"))]
-        unwrap_key_platform(project_id, &wrapped)?
+        if _kek_id == "linux-tpm2-v2" {
+            return Err("Key was sealed with Linux TPM 2.0 ('linux-tpm2-v2'), but this interenv build was compiled without the 'tpm' feature. Reinstall or compile with '--features tpm'.".into());
+        } else {
+            unwrap_key_platform(project_id, &wrapped)?
+        }
     };
 
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]

@@ -74,7 +74,7 @@ class InterEnv
 
         $process = proc_open([$bin, 'show', '--reveal', '--json'], $descriptorSpec, $pipes, null, $env);
         if (!is_resource($process)) {
-            throw new RuntimeException("Failed to execute InterEnv binary: {$bin}");
+            throw new RuntimeException("Failed to execute InterEnv binary: {$bin}. Install via 'cargo install interenv' or download from https://github.com/Bharathcoorg/interenv/releases");
         }
 
         fclose($pipes[0]);

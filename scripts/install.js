@@ -33,8 +33,20 @@ if (foundBinary) {
   process.exit(0);
 }
 
-console.error(`❌ InterEnv: no native binary available for ${platformArch}.`);
-console.error(`   Run 'npm run build:rust' to compile locally, or download a release from:`);
-console.error(`   https://github.com/Bharathcoorg/interenv/releases`);
-process.exit(1);
+// Check if interenv is already available in PATH
+try {
+  const { execSync } = require("child_process");
+  const checkCmd = isWin ? "where interenv" : "command -v interenv";
+  execSync(checkCmd, { stdio: "ignore" });
+  process.exit(0);
+} catch {
+  // Not found in PATH
+}
+
+console.warn(`⚠️  InterEnv: Native binary not bundled for ${platformArch}.`);
+console.warn(`   Please install the CLI via Cargo or download a release binary:`);
+console.warn(`     cargo install interenv`);
+console.warn(`     https://github.com/Bharathcoorg/interenv/releases`);
+console.warn(`   The Node.js SDK will use 'interenv' from your system PATH.`);
+process.exit(0);
 

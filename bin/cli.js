@@ -43,8 +43,14 @@ const child = spawn(cmd, args, {
 });
 
 child.on("error", (err) => {
-  console.error("❌ Failed to launch interenv:", err.message);
-  console.error("💡 If installing from source, please run 'npm run build:rust' first.");
+  if (err.code === "ENOENT") {
+    console.error("❌ InterEnv native binary not found in PATH or package.");
+    console.error("💡 Install the native CLI via Cargo or download a prebuilt binary:");
+    console.error("   cargo install interenv");
+    console.error("   https://github.com/Bharathcoorg/interenv/releases");
+  } else {
+    console.error("❌ Failed to launch interenv:", err.message);
+  }
   process.exit(1);
 });
 

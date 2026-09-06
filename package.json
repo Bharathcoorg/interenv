@@ -13,7 +13,8 @@
     "index.js",
     "index.d.ts",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "prebuilds"
   ],
   "scripts": {
     "postinstall": "node scripts/install.js",

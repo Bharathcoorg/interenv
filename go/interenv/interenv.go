@@ -71,7 +71,7 @@ func All() (map[string]string, error) {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return nil, fmt.Errorf("interenv show failed: %s", string(exitErr.Stderr))
 		}
-		return nil, fmt.Errorf("failed to run interenv binary '%s': %w", bin, err)
+		return nil, fmt.Errorf("failed to run interenv binary '%s' (install via 'cargo install interenv' or https://github.com/Bharathcoorg/interenv/releases): %w", bin, err)
 	}
 
 	var secrets map[string]string
@@ -115,5 +115,8 @@ func Run(name string, args ...string) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to run interenv binary '%s' (install via 'cargo install interenv' or https://github.com/Bharathcoorg/interenv/releases): %w", bin, err)
+	}
+	return nil
 }

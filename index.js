@@ -78,6 +78,9 @@ function config(options = {}) {
 
     return { parsed };
   } catch (err) {
+    if (err.code === "ENOENT") {
+      err.message = `InterEnv native binary not found. Install via 'cargo install interenv' or download from https://github.com/Bharathcoorg/interenv/releases: ${err.message}`;
+    }
     return { error: err };
   }
 }
