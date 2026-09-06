@@ -14,7 +14,7 @@ pub struct WrappedMasterKey {
     pub wrapped: Vec<u8>,
 }
 
-fn derive_kek_mask(project_id: &str) -> [u8; 32] {
+pub(crate) fn derive_kek_mask(project_id: &str) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(b"interenv-kek-v2:");
     hasher.update(project_id.as_bytes());

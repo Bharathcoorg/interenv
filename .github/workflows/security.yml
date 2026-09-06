@@ -17,5 +17,3 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v1
         with:
           arguments: --all-features --hide-incompliant
-      - name: cargo outdated
-        uses: kubouch/cargo-outdated-action@v1.0.0
