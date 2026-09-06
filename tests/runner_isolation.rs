@@ -16,7 +16,7 @@ fn test_runner_isolation_linux_environ() {
     let program = "/bin/sh";
     let args = vec![
         "-c".to_string(),
-        "cat /proc/self/environ | grep -c INTERENV_PROTECTED".to_string(),
+        "cat /proc/self/environ | grep -c MY_TEST_SECRET".to_string(),
     ];
 
     let res = execute_with_env(program, &args, &secrets);
@@ -75,7 +75,7 @@ fn test_runner_isolation_windows() {
     let secrets = Secrets::new(map);
 
     let program = "cmd.exe";
-    let args = vec!["/c".to_string(), "echo %INTERENV_PROTECTED%".to_string()];
+    let args = vec!["/c".to_string(), "echo %MY_TEST_SECRET%".to_string()];
 
     let res = execute_with_env(program, &args, &secrets);
     assert!(res.is_ok());

@@ -28,18 +28,17 @@ pub fn generate_salt() -> [u8; 16] {
 
 /// Check if the system has sufficient memory (> 64 MiB) to run Argon2id safely.
 pub fn check_available_memory() -> Result<(), String> {
-    let avail_mb = get_available_memory_mb().unwrap_or(1024);
+    let avail_mb = get_available_memory_mb();
     if avail_mb < 64 {
         return Err(format!(
-            "Insufficient system memory for Argon2id derivation: only {} MiB available (< 64 MiB required)",
-            avail_mb
+            "Insufficient system memory for Argon2id derivation: only {avail_mb} MiB available (< 64 MiB required)"
         ));
     }
     Ok(())
 }
 
 #[cfg(windows)]
-fn get_available_memory_mb() -> Result<u64, String> {
+fn get_available_memory_mb() -> u64 {
     #[repr(C)]
     struct MemoryStatusEx {
         length: u32,
@@ -73,43 +72,43 @@ fn get_available_memory_mb() -> Result<u64, String> {
     // MemoryStatusEx struct whose length field is correctly set.
     let res = unsafe { GlobalMemoryStatusEx(&mut status) };
     if res != 0 {
-        Ok(status.avail_phys / (1024 * 1024))
+        status.avail_phys / (1024 * 1024)
     } else {
-        Ok(1024)
+        1024
     }
 }
 
 #[cfg(target_os = "linux")]
-fn get_available_memory_mb() -> Result<u64, String> {
+fn get_available_memory_mb() -> u64 {
     // SAFETY: libc::sysconf is called with valid system configuration query constants.
     unsafe {
         let pages = libc::sysconf(libc::_SC_AVPHYS_PAGES);
         let page_size = libc::sysconf(libc::_SC_PAGESIZE);
         if pages > 0 && page_size > 0 {
-            Ok(((pages as u64) * (page_size as u64)) / (1024 * 1024))
+            ((pages as u64) * (page_size as u64)) / (1024 * 1024)
         } else {
-            Ok(1024)
+            1024
         }
     }
 }
 
 #[cfg(all(unix, not(target_os = "linux")))]
-fn get_available_memory_mb() -> Result<u64, String> {
+fn get_available_memory_mb() -> u64 {
     // SAFETY: libc::sysconf is called with valid POSIX system query constants.
     unsafe {
         let pages = libc::sysconf(libc::_SC_PHYS_PAGES);
         let page_size = libc::sysconf(libc::_SC_PAGESIZE);
         if pages > 0 && page_size > 0 {
-            Ok(((pages as u64) * (page_size as u64)) / (1024 * 1024))
+            ((pages as u64) * (page_size as u64)) / (1024 * 1024)
         } else {
-            Ok(1024)
+            1024
         }
     }
 }
 
 #[cfg(not(any(windows, unix)))]
-fn get_available_memory_mb() -> Result<u64, String> {
-    Ok(1024)
+fn get_available_memory_mb() -> u64 {
+    1024
 }
 
 /// Derive a 32-byte master key from a user passphrase and salt using OWASP-compliant Argon2id.

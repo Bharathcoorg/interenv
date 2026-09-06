@@ -8,13 +8,18 @@ use std::path::{Path, PathBuf};
 #[derive(Debug)]
 pub struct TempFileGuard {
     /// Path to the protected temporary file.
-    pub path: PathBuf,
+    path: PathBuf,
 }
 
 impl TempFileGuard {
-    /// Create a new TempFileGuard wrapping a temporary file path.
+    /// Create a new `TempFileGuard` wrapping a temporary file path.
     pub fn new(path: PathBuf) -> Self {
         Self { path }
+    }
+
+    /// Access the protected temporary file path.
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 }
 
@@ -26,7 +31,7 @@ impl Drop for TempFileGuard {
 }
 
 /// Securely overwrite and delete a sensitive plaintext file from disk.
-/// Performs a 3-pass DoD 5220.22-M style overwrite:
+/// Performs a 3-pass `DoD` 5220.22-M style overwrite:
 /// 1. Overwrite with 0x00
 /// 2. Overwrite with 0xFF
 /// 3. Overwrite with cryptographically secure random bytes
@@ -89,16 +94,18 @@ fn platform_post_shred(path: &Path) -> Result<(), String> {
     use std::os::windows::io::AsRawHandle;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::Storage::FileSystem::{
-        FindClose, FindFirstStreamW, FindNextStreamW, SetEndOfFile, SetFileValidData,
+        FindClose, FindFirstStreamW, FindNextStreamW, FlushFileBuffers, SetEndOfFile,
         WIN32_FIND_STREAM_DATA,
     };
 
     if let Ok(file) = OpenOptions::new().write(true).open(path) {
         let handle = HANDLE(file.as_raw_handle() as _);
         // SAFETY: handle is derived from a valid open file with write permissions.
+        // SetEndOfFile truncates the file allocation and FlushFileBuffers commits writes to physical disk.
+        // SetFileValidData is omitted because it requires SE_MANAGE_VOLUME_NAME privilege not held by standard users.
         unsafe {
-            let _ = SetFileValidData(handle, 0);
             let _ = SetEndOfFile(handle);
+            let _ = FlushFileBuffers(handle);
         }
     }
 
@@ -143,7 +150,10 @@ fn platform_post_shred(path: &Path) -> Result<(), String> {
         if len > 0 {
             // SAFETY: fallocate and ioctl are invoked with valid open file descriptor and length.
             unsafe {
-                let _ = libc::fallocate(fd, 0x03, 0, len);
+                // FALLOC_FL_ZERO_RANGE (0x10) | FALLOC_FL_KEEP_SIZE (0x01) = 0x11:
+                // Zeroes allocated disk blocks at filesystem level without deallocating/punching holes
+                // (FALLOC_FL_PUNCH_HOLE deallocates blocks without zeroing, leaving data recoverable).
+                let _ = libc::fallocate(fd, 0x10 | 0x01, 0, len);
                 let mut range: [u64; 2] = [0, len as u64];
                 const BLKDISCARD: libc::c_ulong = 0x1277;
                 let _ = libc::ioctl(fd, BLKDISCARD, range.as_mut_ptr());

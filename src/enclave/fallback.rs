@@ -8,7 +8,7 @@ use crate::crypto::kdf::derive_key_from_passphrase;
 pub fn prompt_or_get_passphrase(prompt_text: &str) -> Result<Zeroizing<String>, String> {
     if let Ok(val) = env::var("INTERENV_PASSPHRASE") {
         if !val.trim().is_empty() {
-            if env::var("INTERENV_CI").map(|v| v == "1").unwrap_or(false) {
+            if env::var("INTERENV_CI").is_ok_and(|v| v == "1") {
                 eprintln!(
                     "⚠️  Using INTERENV_PASSPHRASE from environment (INTERENV_CI is enabled)"
                 );
@@ -25,7 +25,7 @@ pub fn prompt_or_get_passphrase(prompt_text: &str) -> Result<Zeroizing<String>, 
         .with_prompt(prompt_text)
         .interact()
         .map(Zeroizing::new)
-        .map_err(|e| format!("Password input error: {}", e))
+        .map_err(|e| format!("Password input error: {e}"))
 }
 
 /// Derives a 256-bit encryption key from a passphrase and salt using Argon2id.

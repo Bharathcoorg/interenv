@@ -16,7 +16,7 @@ pub struct Cli {
     pub command: Commands,
 }
 
-/// Available subcommands for InterEnv.
+/// Available subcommands for `InterEnv`.
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// 🔒 Seal an existing .env file into the hardware enclave and securely shred the plaintext
@@ -34,10 +34,10 @@ pub enum Commands {
     /// 📊 Inspect repository security status and hardware enclave binding
     Status,
 
-    /// 🩺 Diagnostic doctor to inspect platform hardware enclave, KDF, cipher, and filesystem CoW shred safety
+    /// 🩺 Diagnostic doctor to inspect platform hardware enclave, KDF, cipher, and filesystem `CoW` shred safety
     Doctor,
 
-    /// ℹ️  Display current InterEnv version and cryptographic engine specs
+    /// ℹ️  Display current `InterEnv` version and cryptographic engine specs
     Version,
 
     /// 🛡️  Manage Git pre-commit hooks to prevent accidental plaintext leaks
@@ -127,6 +127,6 @@ pub enum HookAction {
 /// Arguments for the `shred` command.
 #[derive(Args, Debug)]
 pub struct ShredArgs {
-    /// Path of the file to securely shred with DoD 5220.22-M 3-pass overwrite
+    /// Path of the file to securely shred with `DoD` 5220.22-M 3-pass overwrite
     pub target: PathBuf,
 }

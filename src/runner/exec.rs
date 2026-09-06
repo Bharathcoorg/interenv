@@ -62,8 +62,6 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
         cmd.env(k, &**v);
     }
 
-    // Set a marker indicator so tools can detect they are protected by interenv
-    cmd.env("INTERENV_PROTECTED", "1");
 
     #[cfg(target_os = "linux")]
     // SAFETY: pre_exec runs in forked child before exec; setsid detaches
@@ -179,26 +177,30 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
 
     let exit_code = status
         .code()
-        .unwrap_or(if status.success() { 0 } else { 1 });
+        .unwrap_or(i32::from(!status.success()));
     Ok(exit_code)
 }
 
 fn resolve_executable_path(prog: &str) -> String {
     #[cfg(windows)]
     {
-        if !prog.ends_with(".exe") && !prog.ends_with(".cmd") && !prog.ends_with(".bat") {
+        let path = std::path::Path::new(prog);
+        let has_ext = path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("exe") || ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"));
+        if !has_ext {
             // Check if <prog>.cmd exists in PATH
             if let Ok(path_var) = std::env::var("PATH") {
                 for entry in std::env::split_paths(&path_var) {
-                    let cmd_candidate = entry.join(format!("{}.cmd", prog));
+                    let cmd_candidate = entry.join(format!("{prog}.cmd"));
                     if cmd_candidate.is_file() {
                         return cmd_candidate.to_string_lossy().to_string();
                     }
-                    let exe_candidate = entry.join(format!("{}.exe", prog));
+                    let exe_candidate = entry.join(format!("{prog}.exe"));
                     if exe_candidate.is_file() {
                         return exe_candidate.to_string_lossy().to_string();
                     }
-                    let bat_candidate = entry.join(format!("{}.bat", prog));
+                    let bat_candidate = entry.join(format!("{prog}.bat"));
                     if bat_candidate.is_file() {
                         return bat_candidate.to_string_lossy().to_string();
                     }

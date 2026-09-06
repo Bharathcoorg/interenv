@@ -1,19 +1,20 @@
 use std::collections::BTreeMap;
+use std::fmt::Write;
 
 /// Type alias representing parsed environment variable key-value pairs.
 pub type EnvMap = BTreeMap<String, String>;
 
-/// Validate if a string is a valid environment variable key: `^[A-Za-z_.][A-Za-z0-9_.]*$`
+/// Validate if a string is a valid environment variable key: `^[A-Za-z_][A-Za-z0-9_]*$`
 pub fn is_valid_env_key(key: &str) -> bool {
     if key.is_empty() {
         return false;
     }
     let mut chars = key.chars();
     match chars.next() {
-        Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '.' => {}
+        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
         _ => return false,
     }
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// Parse a raw .env file string into key-value pairs.
@@ -200,9 +201,9 @@ pub fn format_dotenv(map: &EnvMap) -> String {
                 .replace('\n', "\\n")
                 .replace('\r', "\\r")
                 .replace('\t', "\\t");
-            out.push_str(&format!("{}=\"{}\"\n", k, escaped));
+            let _ = writeln!(out, "{k}=\"{escaped}\"");
         } else {
-            out.push_str(&format!("{}={}\n", k, v));
+            let _ = writeln!(out, "{k}={v}");
         }
     }
     out
@@ -217,6 +218,7 @@ mod tests {
         assert!(is_valid_env_key("PORT"));
         assert!(is_valid_env_key("_PRIVATE_KEY"));
         assert!(is_valid_env_key("DATABASE_URL_2"));
+        assert!(!is_valid_env_key("FOO.BAR"));
         assert!(!is_valid_env_key("2PORT"));
         assert!(!is_valid_env_key("FOO-BAR"));
         assert!(!is_valid_env_key("KEY WITH SPACE"));
@@ -251,12 +253,12 @@ UNQUOTED_WITH_HASH=my#value
 
     #[test]
     fn test_parse_dotenv_env_file_variations() {
-        let input = "dev.env=val1\nmy.env=val2\n.Env=val3\n.ENV=val4\n";
+        let input = "DEV_ENV=val1\nMY_ENV=val2\n_ENV=val3\nENV=val4\n";
         let parsed = parse_dotenv(input);
-        assert_eq!(parsed.get("dev.env").unwrap(), "val1");
-        assert_eq!(parsed.get("my.env").unwrap(), "val2");
-        assert_eq!(parsed.get(".Env").unwrap(), "val3");
-        assert_eq!(parsed.get(".ENV").unwrap(), "val4");
+        assert_eq!(parsed.get("DEV_ENV").unwrap(), "val1");
+        assert_eq!(parsed.get("MY_ENV").unwrap(), "val2");
+        assert_eq!(parsed.get("_ENV").unwrap(), "val3");
+        assert_eq!(parsed.get("ENV").unwrap(), "val4");
     }
 
     #[test]

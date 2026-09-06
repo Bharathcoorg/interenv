@@ -88,8 +88,14 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
 
     let env_map = parse_dotenv(&raw_content);
     if env_map.is_empty() {
+        if !args.force {
+            return Err(format!(
+                "No valid environment variables found in '{}'. Aborting lock (use --force to lock an empty file).",
+                args.file.display()
+            ));
+        }
         println!(
-            "{} No valid environment variables found in {}.",
+            "{} No valid environment variables found in {}. Proceeding due to --force.",
             "⚠️ ".yellow(),
             args.file.display()
         );
@@ -160,7 +166,15 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
             "🔥 Securely shredding plaintext file from disk (DoD 5220.22-M)...".yellow()
         );
         shred_file(&args.file)?;
-        let _ = fs::remove_file(&args.file);
+        if args.file.exists() {
+            fs::remove_file(&args.file).map_err(|e| {
+                format!(
+                    "Failed to delete shredded file '{}': {}",
+                    args.file.display(),
+                    e
+                )
+            })?;
+        }
         println!(
             "{} Plaintext '{}' destroyed. Zero secrets remain on disk!",
             "✨".green(),
@@ -308,14 +322,7 @@ fn mask_value(val: &str) -> String {
         "••••••••".to_string()
     } else {
         let prefix: String = val.chars().take(3).collect();
-        let suffix: String = val
-            .chars()
-            .rev()
-            .take(3)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect();
+        let suffix: String = val.chars().rev().take(3).collect::<String>().chars().rev().collect();
         format!("{}••••••••{}", prefix, suffix)
     }
 }
@@ -398,7 +405,8 @@ fn handle_status() -> Result<(), String> {
 
 fn handle_version() -> Result<(), String> {
     println!(
-        "interenv v0.1.0 (lockfile schema v{})",
+        "interenv v{} (lockfile schema v{})",
+        env!("CARGO_PKG_VERSION"),
         CURRENT_LOCK_VERSION
     );
     println!("Cipher: XChaCha20-Poly1305 (24-byte random nonces)");
@@ -463,11 +471,31 @@ fn handle_doctor() -> Result<(), String> {
 #[cfg(windows)]
 fn harden_windows_acl(path: &Path) {
     if let Ok(user) = env::var("USERNAME") {
-        let _ = process::Command::new("icacls")
+        match process::Command::new("icacls")
             .arg(path)
             .arg("/inheritance:r")
-            .arg(format!("/grant:r:{}:(R,W)", user))
-            .output();
+            .arg(format!("/grant:r:{user}:(F)"))
+            .output()
+        {
+            Ok(output) if !output.status.success() => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                eprintln!(
+                    "{} Failed to harden ACL on '{}': {}",
+                    "⚠️ ".yellow(),
+                    path.display(),
+                    stderr.trim()
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "{} Failed to execute icacls on '{}': {}",
+                    "⚠️ ".yellow(),
+                    path.display(),
+                    e
+                );
+            }
+            _ => {}
+        }
     }
 }
 
@@ -514,9 +542,7 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
         .map_err(|e| format!("Failed to write to temp file: {}", e))?;
 
     // Create safety net guard that shreds file on scope exit or panic
-    let _guard = TempFileGuard {
-        path: temp_path.clone(),
-    };
+    let _guard = TempFileGuard::new(temp_path.clone());
 
     // Register Ctrl+C handler during editing
     let cleanup_path = temp_path.clone();

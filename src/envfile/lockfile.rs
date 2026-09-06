@@ -17,7 +17,7 @@ pub const CURRENT_LOCK_VERSION: &str = "3.0";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyProviderType {
-    /// Stored in OS Hardware Enclave / Secure Credential Store (TouchID, TPM, Windows Credential Manager)
+    /// Stored in OS Hardware Enclave / Secure Credential Store (`TouchID`, TPM, Windows Credential Manager)
     #[default]
     HardwareEnclave,
     /// Encrypted with an Argon2id derived passphrase (for CI/CD or headless environments)
@@ -70,13 +70,13 @@ fn default_payload() -> EncryptedPayload {
     }
 }
 
-/// Represents the encrypted state and cryptographic metadata of an InterEnv project.
+/// Represents the encrypted state and cryptographic metadata of an `InterEnv` project.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct InterLock {
     /// Lockfile schema version.
     #[serde(default = "default_version")]
     pub version: String,
-    /// Minimum version of InterEnv required to read this lockfile.
+    /// Minimum version of `InterEnv` required to read this lockfile.
     #[serde(default = "default_min_compatible_version")]
     pub min_compatible_version: String,
     /// Unique project identifier.
@@ -115,7 +115,7 @@ pub struct InterLock {
 }
 
 impl InterLock {
-    /// Construct a new InterLock instance with latest schema v3.0 defaults.
+    /// Construct a new `InterLock` instance with latest schema v3.0 defaults.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         project_id: String,
