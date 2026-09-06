@@ -12,7 +12,7 @@ use tss_esapi::{
         Digest, KeyedHashScheme, PublicBuilder, PublicKeyedHashParameters, RsaExponent,
         SensitiveData, SymmetricDefinitionObject,
     },
-    tcti_ldr::{DeviceConfig, TctiNameConf},
+    tcti_ldr::TctiNameConf,
     traits::{Marshall, UnMarshall},
     Context,
 };
@@ -26,6 +26,8 @@ struct TpmSealedBlob {
 
 #[cfg(all(target_os = "linux", feature = "tpm"))]
 fn open_tpm_context() -> Result<Context, String> {
+    use std::str::FromStr;
+
     let device_path = if std::path::Path::new("/dev/tpmrm0").exists() {
         "/dev/tpmrm0"
     } else if std::path::Path::new("/dev/tpm0").exists() {
@@ -34,9 +36,8 @@ fn open_tpm_context() -> Result<Context, String> {
         return Err("No TPM device found (/dev/tpmrm0 or /dev/tpm0)".into());
     };
 
-    let conf = TctiNameConf::Device(DeviceConfig {
-        path: std::path::PathBuf::from(device_path),
-    });
+    let conf = TctiNameConf::from_str(&format!("device:{}", device_path))
+        .map_err(|e| format!("Invalid TPM TCTI configuration: {:?}", e))?;
 
     Context::new(conf).map_err(|e| format!("TPM context creation failed: {:?}", e))
 }

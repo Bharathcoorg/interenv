@@ -74,6 +74,37 @@ pub fn safe_canonicalize(path: &Path) -> Result<PathBuf, String> {
     {
         use std::os::unix::ffi::OsStrExt;
 
+        let abs_path: PathBuf;
+        let path: &Path = if path.is_relative() {
+            abs_path = std::env::current_dir()
+                .map_err(|e| format!("Failed to get current dir: {}", e))?
+                .join(path);
+            &abs_path
+        } else {
+            path
+        };
+
+        #[cfg(target_os = "macos")]
+        let macos_norm: PathBuf;
+        #[cfg(target_os = "macos")]
+        let path: &Path = {
+            // On macOS, /var, /tmp, and /etc are canonical system symlinks to /private/*.
+            // Normalize these system prefixes so that the O_NOFOLLOW walk traverses the
+            // underlying directory hierarchy without tripping on Apple's default root links.
+            if let Ok(stripped) = path.strip_prefix("/var") {
+                macos_norm = Path::new("/private/var").join(stripped);
+                &macos_norm
+            } else if let Ok(stripped) = path.strip_prefix("/tmp") {
+                macos_norm = Path::new("/private/tmp").join(stripped);
+                &macos_norm
+            } else if let Ok(stripped) = path.strip_prefix("/etc") {
+                macos_norm = Path::new("/private/etc").join(stripped);
+                &macos_norm
+            } else {
+                path
+            }
+        };
+
         // Open "/" with O_NOFOLLOW so the walk cannot be redirected through a
         // symlink at the very first component.
         #[cfg(target_os = "linux")]
