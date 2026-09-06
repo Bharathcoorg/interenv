@@ -514,7 +514,7 @@ pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
     );
 
     let raw_val = key_hex_str.as_str();
-    let (kek_id, hex_part) = if let Some(idx) = raw_val.find(':') {
+    let (_kek_id, hex_part) = if let Some(idx) = raw_val.find(':') {
         (&raw_val[..idx], &raw_val[idx + 1..])
     } else {
         ("", raw_val)
@@ -525,10 +525,10 @@ pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
     );
 
     #[cfg(windows)]
-    let raw_key = if kek_id == "windows-ncrypt-tpm-v2" {
+    let raw_key = if _kek_id == "windows-ncrypt-tpm-v2" {
         unwrap_key_ncrypt(project_id, &wrapped)
             .or_else(|_| unwrap_key_dpapi(project_id, &wrapped))?
-    } else if kek_id == "windows-dpapi-tpm" {
+    } else if _kek_id == "windows-dpapi-tpm" {
         unwrap_key_dpapi(project_id, &wrapped)
             .or_else(|_| unwrap_key_ncrypt(project_id, &wrapped))?
     } else {
@@ -536,7 +536,7 @@ pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
     };
 
     #[cfg(target_os = "macos")]
-    let raw_key = if kek_id == "macos-secure-enclave-v1" {
+    let raw_key = if _kek_id == "macos-secure-enclave-v1" {
         crate::enclave::macos_secure_enclave::unwrap_key_secure_enclave(project_id, &wrapped)
             .or_else(|_| {
                 crate::enclave::macos_secure_enclave::unwrap_key_macos_keychain_software(
@@ -550,7 +550,7 @@ pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
     #[cfg(target_os = "linux")]
     let raw_key = {
         #[cfg(feature = "tpm")]
-        if kek_id == "linux-tpm2-v1" {
+        if _kek_id == "linux-tpm2-v1" {
             crate::enclave::linux_tpm::unwrap_key_tpm2(project_id, &wrapped)
                 .or_else(|_| unwrap_key_platform(project_id, &wrapped))?
         } else {

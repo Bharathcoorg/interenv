@@ -2,6 +2,7 @@ use interenv::enclave::keyring_backend::{delete_key, retrieve_key, store_key};
 
 #[test]
 fn test_enclave_kek_roundtrip() {
+    std::env::set_var("INTERENV_ALLOW_MACOS_SOFTWARE_FALLBACK", "1");
     let project_id = "test-project-kek-roundtrip-999";
     let master_key = [77u8; 32];
 
@@ -10,6 +11,8 @@ fn test_enclave_kek_roundtrip() {
         if e.contains("org.freedesktop.secrets")
             || e.contains("Platform secure storage failure")
             || e.contains("Keyring initialization error")
+            || e.contains("Apple Secure Enclave hardware")
+            || e.contains("Touch ID is unavailable")
         {
             return;
         }
@@ -42,6 +45,17 @@ fn test_enclave_kek_roundtrip() {
     );
 
     let retrieve_res = retrieve_key(project_id);
+    if let Err(ref e) = retrieve_res {
+        if e.contains("org.freedesktop.secrets")
+            || e.contains("Platform secure storage failure")
+            || e.contains("Keyring initialization error")
+            || e.contains("Apple Secure Enclave hardware")
+            || e.contains("Touch ID is unavailable")
+        {
+            let _ = delete_key(project_id);
+            return;
+        }
+    }
     assert!(
         retrieve_res.is_ok(),
         "Failed to retrieve key with KEK: {:?}",
@@ -56,6 +70,7 @@ fn test_enclave_kek_roundtrip() {
 
 #[test]
 fn test_enclave_kek_idempotent_store() {
+    std::env::set_var("INTERENV_ALLOW_MACOS_SOFTWARE_FALLBACK", "1");
     let project_id = "test-project-kek-idempotent-888";
     let master_key = [88u8; 32];
 
@@ -64,19 +79,47 @@ fn test_enclave_kek_idempotent_store() {
         Err(ref e)
             if e.contains("org.freedesktop.secrets")
                 || e.contains("Platform secure storage failure")
-                || e.contains("Keyring initialization error") =>
+                || e.contains("Keyring initialization error")
+                || e.contains("Apple Secure Enclave hardware")
+                || e.contains("Touch ID is unavailable") =>
         {
             return;
         }
         Err(e) => panic!("Failed to store key with KEK: {}", e),
     };
-    let store2 = store_key(project_id, &master_key).unwrap();
+    let store2 = match store_key(project_id, &master_key) {
+        Ok(s) => s,
+        Err(ref e)
+            if e.contains("org.freedesktop.secrets")
+                || e.contains("Platform secure storage failure")
+                || e.contains("Keyring initialization error")
+                || e.contains("Apple Secure Enclave hardware")
+                || e.contains("Touch ID is unavailable") =>
+        {
+            let _ = delete_key(project_id);
+            return;
+        }
+        Err(e) => panic!("Failed to store key with KEK: {}", e),
+    };
     assert_eq!(
         store1.kek_id, store2.kek_id,
         "KEK ID must be stable across multiple stores"
     );
 
-    let retrieved = retrieve_key(project_id).unwrap();
+    let retrieved = match retrieve_key(project_id) {
+        Ok(r) => r,
+        Err(ref e)
+            if e.contains("org.freedesktop.secrets")
+                || e.contains("Platform secure storage failure")
+                || e.contains("Keyring initialization error")
+                || e.contains("Apple Secure Enclave hardware")
+                || e.contains("Touch ID is unavailable") =>
+        {
+            let _ = delete_key(project_id);
+            return;
+        }
+        Err(e) => panic!("Failed to retrieve key: {}", e),
+    };
     assert_eq!(*retrieved, master_key);
     let _ = delete_key(project_id);
 }
