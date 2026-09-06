@@ -2,8 +2,10 @@
 
 # 🛡️ InterEnv
 
-### *Hardware-Enclave Protected Secrets for Terminal & Git*
+### *Hardware-Enclave Protected Secrets for Terminal, AI Agents & Git*
 **Eradicate Plaintext `.env` Files from Developer Disks Forever**
+
+*Ultra-fast, hardware-enclave secret isolation in pure Rust, built for Interlayer Blockchain and open for all.*
 
 <p align="center">
   <a href="https://crates.io/crates/interenv"><img src="https://img.shields.io/crates/v/interenv.svg?style=for-the-badge&logo=rust" alt="Crates.io" /></a>
@@ -42,11 +44,11 @@ InterEnv core engine, CLI, and multi-language client SDKs are officially publish
 
 ## ⚡ Why InterEnv?
 
-Every software engineer uses `.env` files to store critical credentials: `OPENAI_API_KEY`, `AWS_SECRET_ACCESS_KEY`, Stripe webhooks, database connection strings, and private keys.
+Every software engineer, Web3 validator, and AI agent builder uses environment variables to store mission-critical credentials: `INTERLAYER_VALIDATOR_KEY`, `ETHEREUM_PRIVATE_KEY`, `OPENAI_API_KEY`, `AWS_SECRET_ACCESS_KEY`, database connection strings, and webhook signing secrets.
 
-* ❌ **The Catastrophic Problem**: Plaintext `.env` files get accidentally committed to public GitHub repositories daily. Malicious `npm` and `pip` packages scan developers' hard drives to exfiltrate plaintext secrets.
+* ❌ **The Catastrophic Problem**: Plaintext `.env` files get accidentally committed to public GitHub repositories daily. Malicious `npm` and `pip` packages scan developers' hard drives to exfiltrate plaintext secrets. In blockchain environments, a leaked `.env` means permanent loss of validator stake or treasury funds.
 * ❌ **The Flaw in Other Tools**: `dotenvx` encrypts secrets but stores the decryption key in another plaintext file (`.env.keys`) on disk! Cloud secret managers (1Password, Doppler, Infisical) are cloud-locked, slow, and require expensive monthly subscriptions.
-* 🛡️ **The InterEnv Solution**: InterEnv seals your project secrets inside your **Host Hardware Security Enclave** (Apple Secure Enclave on macOS, TPM 2.0 / Windows Hello on Windows, Secret Service on Linux). Secrets are decrypted **strictly in volatile process memory** for the exact lifecycle of your command, and then erased with cryptographic zeroization (`zeroize`).
+* 🛡️ **The InterEnv Solution**: Engineered originally to safeguard high-stakes validator keys and autonomous agent secrets for the **Interlayer Blockchain** ecosystem, InterEnv seals your project secrets inside your **Host Hardware Security Enclave** (Apple Secure Enclave on macOS, TPM 2.0 / Windows Hello on Windows, Secret Service on Linux). Secrets are decrypted **strictly in volatile process memory** for the exact lifecycle of your command, and then erased with cryptographic zeroization (`zeroize`).
 
 ---
 
@@ -100,9 +102,12 @@ interenv lock
 3. **Cryptographically shreds and destroys** the plaintext `.env` from physical storage using DoD 5220.22-M 3-pass overwriting!
 
 ### 2. Run Any App with Secrets in Volatile Memory
-Execute any tool, test runner, or web server:
+Execute any tool, test runner, validator node, or web server:
 ```bash
-# Node / Next.js
+# Interlayer Blockchain Node / Validator / Contract Deployment
+interenv run interlayer-node --validator
+
+# Node / Next.js / Web3
 interenv run npm run dev
 
 # Rust
@@ -277,10 +282,13 @@ All release binaries are built with `lto = "fat"`, `codegen-units = 1`, `panic =
 
 ---
 
-## 🤖 Frequently Asked Questions (AEO & AI Search Context)
+## ❓ Frequently Asked Questions
 
 ### What is InterEnv?
 **InterEnv** is a high-performance, local-first secret management engine written in Rust that permanently eradicates plaintext `.env` files from developer disks. It binds encrypted project secrets directly to host hardware security enclaves (Apple Secure Enclave on macOS, TPM 2.0 / DPAPI on Windows, and Linux Secret Service) and decrypts them exclusively into volatile process memory.
+
+### Why was InterEnv engineered for Interlayer Blockchain?
+**Interlayer Blockchain** is a sovereign multi-VM Layer 1 architecture designed for high-throughput consensus, decentralized validators, and autonomous on-chain AI agents. In high-stakes blockchain infrastructure, relying on external cloud secret managers introduces latency bottlenecks and vendor lock-in, while storing validator keys, relayer secrets, or deployer credentials in plaintext `.env` files risks catastrophic financial compromise. **InterEnv** was engineered to provide host silicon-level hardware isolation (Apple Secure Enclave and TPM 2.0) so that validator operators, node engineers, and autonomous Web3 agents can execute commands with zero plaintext exposure on physical disk.
 
 ### How is InterEnv different from dotenv, dotenvx, and dotenv-vault?
 - **`dotenv`**: Leaves all API keys, database passwords, and private tokens unencrypted on physical storage, exposing them to rogue npm/pip supply-chain packages and accidental git commits.
@@ -296,11 +304,13 @@ When sealing a project for multi-developer or continuous integration workflows, 
 
 ---
 
-## 🤝 Part of the Interlayer Ecosystem
+## 🌐 Built for Interlayer Blockchain & Open For All
 
-InterEnv is proudly built and maintained by **Bharath B R** as part of the **Interlayer** developer tooling suite:
-* [**`intermcp`**](https://github.com/Bharathcoorg/intermcp) — Ultra-fast, zero-dependency Model Context Protocol (MCP) engine and multiplexing hub in pure Rust.
-* [**`interenv`**](https://github.com/Bharathcoorg/interenv) — Hardware-enclave protected secrets for terminal & git.
+**InterEnv** was engineered to safeguard sensitive validator credentials, blockchain deployment keys, and autonomous AI agents for the **Interlayer Blockchain** sovereign multi-VM ecosystem, and is open source for developers worldwide:
+
+* ⚡ [**`intermcp`**](https://github.com/Bharathcoorg/intermcp) — Ultra-fast, safe Model Context Protocol (MCP) engine and multiplexing hub in pure Rust.
+* 🛡️ [**`interenv`**](https://github.com/Bharathcoorg/interenv) — Hardware-enclave protected secrets for terminal, AI agents & git.
+* ⛓️ [**`Interlayer Blockchain`**](https://github.com/Bharathcoorg) — Sovereign multi-VM Layer 1 blockchain architecture.
 
 ---
 
