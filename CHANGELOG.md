@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1] - 2026-09-07
+
+### Security Hardening, Multi-Platform Enclave Upgrades & SDK Release Fixes
+
+#### Cryptography & Hardware Enclaves
+- **Linux TPM 2.0 Genuine Hardware Key Sealing**: Replaced XOR mask key wrapping with real TPM 2.0 object sealing via `tss-esapi 7.7.0` (`linux-tpm2-v2`). Generates an RSA 2048 primary storage key under `Hierarchy::Owner` and creates a child `KeyedHash` containing the 32-byte master key with fixed TPM and owner authorization attributes.
+- **macOS Secure Enclave Hardware Binding**: Integrated `security-framework` crate for hardware-backed P-256 EC key generation (`Token::SecureEnclave`) and ECIES encryption/decryption (`macos-secure-enclave-v1`). Added 48-byte salted KEK (`macos-keychain-kek-v3`) with 16-byte random salt for headless fallback environments.
+- **Windows NCrypt & DPAPI Isolation**: Enforced strict KEK dispatch (`windows-ncrypt-tpm-v2` vs `windows-dpapi-tpm`), eliminating silent fallback from hardware TPM to software DPAPI on retrieval.
+- **Salted Software KEKs**: All fallback software KEK derivation now uses a fresh 16-byte random salt via `OsRng` with HKDF-SHA256, formatted as 48 bytes with backwards compatibility for legacy 32-byte entries.
+
+#### Process Sandbox & Child Execution
+- **Linux Parent-Death Cleanup**: Registered `libc::prctl(PR_SET_PDEATHSIG, SIGKILL)` in child `pre_exec` before `setsid()` with defensive parent PID check to prevent orphaned processes containing decrypted secrets.
+- **Linux Seccomp BPF Rules**: Upgraded filter rules to unconditionally match and deny `ptrace`, `process_vm_readv`, `process_vm_writev`, `kcmp`, and `unshare`.
+- **macOS Sandbox Profile**: Configured profile to allow working directory development operations by default while maintaining isolation from unauthorized system access.
+- **PATH Hijacking Defense**: Sanitized `PATH` traversal in executable lookup to ignore relative directories and enforce standard Windows binary extension precedence (`.exe` > `.cmd` > `.bat`).
+
+#### File Shredder & Safety Net
+- **Symlink Defenses**: Added symlink metadata checks and `O_NOFOLLOW` file descriptor flags to reject shredding symlink targets and prevent redirection attacks.
+- **Block Device Guard**: Confirmed target file is a block special device (`S_IFBLK`) prior to issuing `BLKDISCARD` ioctl commands on Linux.
+- **Alternate Data Stream Sanitization**: Validated Windows NTFS ADS stream names against a strict alphanumeric whitelist.
+
+#### Multi-Ecosystem SDKs
+- **NPM Package Postinstall**: Fixed critical bug in `scripts/install.js` where lack of bundled prebuilds caused `npm install interenv` to exit with error code 1. Now checks system `PATH` and exits cleanly with 0 while logging helpful CLI install instructions.
+- **Developer Error Diagnostics**: Enhanced Node.js, Python, Go, and PHP SDKs with clear actionable messages when the native `interenv` binary is missing from `PATH`.
+- **Prebuilds Packaging**: Added `"prebuilds"` directory to `package.json` `"files"`.
+
+---
+
 ## [1.0.0] - 2026-09-06
 
 ### Major Release (v1.0.0 Release Candidate & General Availability)

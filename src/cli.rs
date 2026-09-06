@@ -6,7 +6,7 @@ use std::path::PathBuf;
 #[command(
     name = "interenv",
     author = "Bharath B R <bharathcoorg7@gmail.com>",
-    version = "1.0.0",
+    version = "1.0.1",
     about = "🛡️  Hardware-Enclave Protected Secrets for Terminal & Git (Zero Plaintext .env on Disk) by Interlayer",
     long_about = "InterEnv eliminates plaintext secrets from developer machines. It encrypts project .env files directly into your OS Hardware Security Enclave (TouchID, TPM 2.0, Windows Hello) and injects decrypted secrets directly into volatile process memory at runtime."
 )]

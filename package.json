@@ -1,6 +1,6 @@
 {
   "name": "interenv",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Hardware-Enclave Protected Secrets for Terminal, AI Agents & Git (Zero Plaintext .env on Disk) by Interlayer - Modern Dotenv Alternative with TPM 2.0 & Secure Enclave",
   "main": "index.js",
   "types": "index.d.ts",

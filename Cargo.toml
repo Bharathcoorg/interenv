@@ -1,6 +1,6 @@
 [package]
 name = "interenv"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 authors = ["Bharath B R <bharathcoorg7@gmail.com>"]
 description = "Hardware-Enclave Protected Secrets for Terminal, AI Agents & Git (Zero Plaintext .env) - Modern Dotenv Alternative with TPM & Secure Enclave by Interlayer"

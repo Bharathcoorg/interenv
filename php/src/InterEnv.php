@@ -7,7 +7,7 @@ namespace InterEnv;
 use RuntimeException;
 
 /**
- * InterEnv PHP SDK v1.0.0
+ * InterEnv PHP SDK v1.0.1
  * Hardware-Enclave Protected Secrets for PHP & Laravel Applications.
  * Built by Interlayer.
  */

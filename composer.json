@@ -1,6 +1,6 @@
 {
   "name": "bharathcoorg/interenv",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Hardware-Enclave Protected Secrets for PHP & Laravel Applications (Zero Plaintext .env on Disk) by Interlayer",
   "type": "library",
   "license": "MIT",
