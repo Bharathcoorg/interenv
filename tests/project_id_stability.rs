@@ -3,7 +3,7 @@ use std::fs;
 use tempfile::TempDir;
 
 #[test]
-fn test_project_id_stability_across_rename() {
+fn test_project_id_stability_and_collision_resistance() {
     let temp_root = TempDir::new().unwrap();
     let original_dir = temp_root.path().join("my-repo-dir-1");
     fs::create_dir_all(&original_dir).unwrap();
@@ -23,16 +23,28 @@ fn test_project_id_stability_across_rename() {
     let (id1, name1) = compute_project_id(&original_dir);
     assert_eq!(name1, "my-awesome-tool");
 
-    // Now simulate renaming the directory
-    let renamed_dir = temp_root.path().join("renamed-directory-folder-2");
-    fs::rename(&original_dir, &renamed_dir).unwrap();
+    // Same repo and folder produces identical, deterministic project_id
+    let (id1_repeat, name1_repeat) = compute_project_id(&original_dir);
+    assert_eq!(id1, id1_repeat);
+    assert_eq!(name1, name1_repeat);
 
-    let (id2, name2) = compute_project_id(&renamed_dir);
+    // Two unrelated projects with identical git/manifest in different folders
+    // MUST NOT have identical project_id (M-9 folder collision prevention)
+    let different_dir = temp_root.path().join("different-folder-dir-2");
+    fs::create_dir_all(&different_dir).unwrap();
+    let git_dir2 = different_dir.join(".git");
+    fs::create_dir_all(&git_dir2).unwrap();
+    fs::write(git_dir2.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+    fs::write(
+        different_dir.join("Cargo.toml"),
+        "[package]\nname = \"my-awesome-tool\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+
+    let (id2, name2) = compute_project_id(&different_dir);
     assert_eq!(name2, "my-awesome-tool");
-
-    // The project_id MUST be stable across folder renames
-    assert_eq!(
+    assert_ne!(
         id1, id2,
-        "Project ID changed after folder rename! Expected stability."
+        "Distinct folders with identical manifests must not collide (M-9)"
     );
 }

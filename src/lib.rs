@@ -31,7 +31,7 @@ pub use envfile::Secrets;
 pub use util::safe_canonicalize;
 
 /// Compute a stable project ID bound to repository anchors (.git/HEAD, manifests)
-/// ensuring folder renaming keeps the same ID if the repo is unchanged.
+/// and folder name, preventing collisions across different folder names (M-9).
 pub fn compute_project_id(cwd: &Path) -> (String, String) {
     let canonical = safe_canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
     let folder_name = canonical
@@ -41,12 +41,10 @@ pub fn compute_project_id(cwd: &Path) -> (String, String) {
         .to_string();
 
     let mut hasher = Sha256::new();
-    let mut has_stable_anchor = false;
 
     let git_head = canonical.join(".git").join("HEAD");
     if let Ok(head_bytes) = std::fs::read(&git_head) {
         hasher.update(&head_bytes);
-        has_stable_anchor = true;
     }
 
     let cargo_toml = canonical.join("Cargo.toml");
@@ -56,7 +54,6 @@ pub fn compute_project_id(cwd: &Path) -> (String, String) {
     if let Ok(bytes) = std::fs::read(&cargo_toml) {
         let slice = &bytes[..bytes.len().min(1024)];
         hasher.update(slice);
-        has_stable_anchor = true;
         if let Ok(s) = std::str::from_utf8(slice) {
             for line in s.lines() {
                 let trimmed = line.trim();
@@ -71,12 +68,9 @@ pub fn compute_project_id(cwd: &Path) -> (String, String) {
     } else if let Ok(bytes) = std::fs::read(&package_json) {
         let slice = &bytes[..bytes.len().min(1024)];
         hasher.update(slice);
-        has_stable_anchor = true;
     }
 
-    if !has_stable_anchor {
-        hasher.update(folder_name.as_bytes());
-    }
+    hasher.update(folder_name.as_bytes());
 
     let project_name = manifest_name.unwrap_or_else(|| folder_name.clone());
     let hash = hex::encode(hasher.finalize());

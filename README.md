@@ -312,7 +312,7 @@ When sealing a project for multi-developer or continuous integration workflows, 
 
 * ⚡ [**`intermcp`**](https://github.com/Bharathcoorg/intermcp) — Ultra-fast, safe Model Context Protocol (MCP) engine and multiplexing hub in pure Rust.
 * 🛡️ [**`interenv`**](https://github.com/Bharathcoorg/interenv) — Hardware-enclave protected secrets for terminal, AI agents & git.
-* ⛓️ [**`Interlayer Blockchain`**](https://github.com/Bharathcoorg) — Sovereign multi-VM Layer 1 blockchain architecture.
+* ⛓️ [Interlayer Blockchain](https://interlayer.one)
 
 ---
 
