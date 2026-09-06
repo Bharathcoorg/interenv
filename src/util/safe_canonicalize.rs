@@ -98,10 +98,7 @@ pub fn safe_canonicalize(path: &Path) -> Result<PathBuf, String> {
                     std::path::Component::CurDir => {}
                     std::path::Component::ParentDir => {
                         if fds.len() <= 1 {
-                            return Err(format!(
-                                "Path traversal escapes root: {}",
-                                path.display()
-                            ));
+                            return Err(format!("Path traversal escapes root: {}", path.display()));
                         }
                         if let Some(fd) = fds.pop() {
                             unsafe {
@@ -119,17 +116,14 @@ pub fn safe_canonicalize(path: &Path) -> Result<PathBuf, String> {
                             ));
                         }
                         // SAFETY: bytes contain no NUL; CString::new owns its copy.
-                        let c_cstr =
-                            std::ffi::CString::new(bytes).map_err(|_| {
-                                format!("Invalid path component: {}", c.display())
-                            })?;
+                        let c_cstr = std::ffi::CString::new(bytes)
+                            .map_err(|_| format!("Invalid path component: {}", c.display()))?;
                         let parent_fd = *fds.last().unwrap();
                         // SAFETY: parent_fd is a valid directory fd opened with
                         // O_NOFOLLOW; c_cstr is NUL-terminated. O_NOFOLLOW makes
                         // openat fail with ELOOP if the component is a symlink.
-                        let comp_fd = unsafe {
-                            libc::openat(parent_fd, c_cstr.as_ptr(), open_flags)
-                        };
+                        let comp_fd =
+                            unsafe { libc::openat(parent_fd, c_cstr.as_ptr(), open_flags) };
                         if comp_fd < 0 {
                             let err = std::io::Error::last_os_error();
                             if err.raw_os_error() == Some(libc::ELOOP) {
@@ -195,8 +189,7 @@ pub fn safe_canonicalize(path: &Path) -> Result<PathBuf, String> {
                 for n in &names {
                     p.push(n);
                 }
-                std::fs::canonicalize(&p)
-                    .map_err(|e| format!("Canonicalization error: {}", e))
+                std::fs::canonicalize(&p).map_err(|e| format!("Canonicalization error: {}", e))
             }
         });
 
@@ -218,6 +211,7 @@ pub fn safe_canonicalize(path: &Path) -> Result<PathBuf, String> {
 
 /// Render a path for an error message from the accumulated component names plus
 /// the component currently being inspected.
+#[cfg(unix)]
 fn display_joined(names: &[String], c: &std::ffi::OsStr) -> String {
     let mut p = String::from("/");
     for n in names {
