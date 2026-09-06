@@ -91,12 +91,17 @@ jobs:
       - name: Generate SBOM (SPDX)
         run: |
           cargo install cargo-bom --locked || true
-          cargo bom --format spdx > release-assets/sbom.spdx 2>/dev/null || echo "SPDX SBOM fallback"
+          cargo bom --format spdx > release-assets/sbom.spdx 2>/dev/null || true
+          if [ ! -s release-assets/sbom.spdx ]; then
+            echo "SPDXVersion: SPDX-2.3" > release-assets/sbom.spdx
+            echo "PackageName: interenv" >> release-assets/sbom.spdx
+            echo "PackageVersion: ${{ github.ref_name }}" >> release-assets/sbom.spdx
+          fi
 
       - name: Sign Release Artifacts (Cosign)
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-version: 'v2.2.4'
+          cosign-release: 'v2.2.4'
 
       - name: Cosign Keyless Signing
         run: |
@@ -104,6 +109,8 @@ jobs:
           if [ -f "SHA256SUMS.txt" ]; then
             cosign sign-blob --yes --output-certificate certificate.pem --output-signature SHA256SUMS.sig SHA256SUMS.txt || true
           fi
+          # Delete any 0-byte files so GitHub Releases API never rejects them
+          find . -type f -size 0 -delete
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
