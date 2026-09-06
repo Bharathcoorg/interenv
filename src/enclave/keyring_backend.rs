@@ -474,10 +474,10 @@ fn unwrap_key_platform(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Str
             Err(e) => {
                 let tpm_exists = std::path::Path::new("/dev/tpmrm0").exists()
                     || std::path::Path::new("/dev/tpm0").exists();
-                if !tpm_exists {
-                    eprintln!("ℹ️  TPM not available: hardware device not found (/dev/tpmrm0)");
-                } else {
+                if tpm_exists {
                     eprintln!("⚠️  TPM operation failed: {e}");
+                } else {
+                    eprintln!("ℹ️  TPM not available: hardware device not found (/dev/tpmrm0)");
                 }
             }
         }
