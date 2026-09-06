@@ -3,13 +3,23 @@
 //! Hardware-Enclave Protected Secrets for Terminal & Git (Zero Plaintext `.env` on Disk).
 //! Built by Interlayer for ultra-secure, local-first secret management.
 
+#![deny(missing_docs)]
+
+/// Command-line argument parsing and definition structures.
 pub mod cli;
+/// Cryptographic primitives including XChaCha20-Poly1305 and Argon2id KDF.
 pub mod crypto;
+/// Hardware enclave and OS keyring integration backends.
 pub mod enclave;
+/// Dotenv file parser, secrets container, and lockfile schema.
 pub mod envfile;
+/// Git pre-commit hooks and secret scanning logic.
 pub mod git;
+/// Process execution runner with platform-specific sandboxing.
 pub mod runner;
+/// DoD 5220.22-M 3-pass file shredder with platform decommitment.
 pub mod shredder;
+/// Shared utilities including symlink-safe canonicalization.
 pub mod util;
 
 use sha2::{Digest, Sha256};
@@ -33,14 +43,12 @@ pub fn compute_project_id(cwd: &Path) -> (String, String) {
     let mut hasher = Sha256::new();
     let mut has_stable_anchor = false;
 
-    // 1. Content of .git/HEAD (if present)
     let git_head = canonical.join(".git").join("HEAD");
     if let Ok(head_bytes) = std::fs::read(&git_head) {
         hasher.update(&head_bytes);
         has_stable_anchor = true;
     }
 
-    // 2. First 1KB of Cargo.toml or package.json (whichever exists)
     let cargo_toml = canonical.join("Cargo.toml");
     let package_json = canonical.join("package.json");
     let mut manifest_name = None;
@@ -66,7 +74,6 @@ pub fn compute_project_id(cwd: &Path) -> (String, String) {
         has_stable_anchor = true;
     }
 
-    // 3. Fall back to folder name if neither exists
     if !has_stable_anchor {
         hasher.update(folder_name.as_bytes());
     }

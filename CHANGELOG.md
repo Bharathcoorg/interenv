@@ -7,36 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [1.0.0] - 2026-09-06
 
-### v0.2.0 Security Hardening (in progress)
-- **Real Sandbox Isolation for Child Processes ([Audit Finding H1.8](#fix-1--real-sandbox-isolation-for-child-processes))**:
-  - Windows: Attached spawned child processes to a dedicated Windows Job Object configured with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` to ensure child processes terminate automatically if parent terminates or crashes.
-  - Linux: Implemented `src/runner/linux_seccomp.rs` compiling a seccomp BPF filter with `seccompiler` denying `ptrace`, `process_vm_readv`, `process_vm_writev`, `kcmp`, `unshare`, `mount`, and other privilege-escalation syscalls with `EPERM`.
-  - macOS: Implemented `src/runner/macos_sandbox.rs` installing an Apple Sandbox profile via `sandbox_init` confining child writes strictly to `/dev/null`, `/dev/tty`, and `/private/tmp/.*`.
-  - Fail-Closed Policy: Setup failures emit warnings and terminate with code 75 (EX_TEMPFAIL) unless bypassed via `INTERENV_UNSAFE=1`.
-- **Real TPM / Secure Enclave KEK Wrapping ([Audit Finding H1.5](#fix-2--real-tpmsecure-enclave-backed-kek))**:
-  - Windows: Implemented TPM 2.0 key encryption via `NCryptOpenStorageProvider` (`MS_PLATFORM_CRYPTO_PROVIDER`), `NCryptCreatePersistedKey`, and `NCryptEncrypt` (`windows-ncrypt-tpm-v2`), with transparent fallback to DPAPI (`windows-dpapi-tpm`).
-  - macOS: Integrated Keychain and Secure Enclave key derivation reporting `macos-keychain-kek-v2`.
-  - Linux: Implemented runtime TPM device detection (`/dev/tpmrm0`, `/dev/tpm0`, `/sys/class/tpm/tpm0/device/active`) returning `interenv-kek-v2-linux-tpm-fallback` or `interenv-kek-v2-linux-no-tpm`.
-  - Idempotency & Stability: Stored keys maintain stable KEK IDs across repeated invocations.
-- **True Disk Wipe for CoW / SSD Media ([Audit Finding H1.9](#fix-3--true-disk-wipe-for-cowssd))**:
-  - Implemented `platform_post_shred` following 3-pass DoD 5220.22-M overwrite.
-  - Windows: Invoked `SetFileValidData(0)` and `SetEndOfFile` to decommit filesystem pages, plus Alternate Data Stream (ADS) enumeration via `FindFirstStreamW`/`FindNextStreamW` and individual stream destruction.
-  - Linux: Applied `fallocate(FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE)` followed by `ioctl(BLKDISCARD)` to issue hardware-level TRIM commands down to flash controller media.
-  - macOS: Issued `fcntl(fd, F_FULLFSYNC)` to force disk controller cache flushes and warned on APFS copy-on-write limitations.
-- **TOCTOU Symlink Protection via `safe_canonicalize` ([Audit Finding H1.10](#fix-4--toctou-symlink-protection))**:
-  - Removed vulnerable `dunce::canonicalize` dependency across all modules (`src/lib.rs`, `src/envfile/lockfile.rs`, `src/git/hook.rs`).
-  - Created `src/util/safe_canonicalize.rs` providing atomic symlink traversal without race conditions.
-  - Windows: Evaluated normalized handle targets via `GetFinalPathNameByHandleW` with `FILE_FLAG_OPEN_REPARSE_POINT` and rejected paths containing symlink reparse points.
-  - Linux / macOS: Traversed directory hierarchy ensuring symlinks are rejected and resolution remains strictly within target boundaries.
-- **Deepscan Enhancements**:
-  - Backward compatibility & migration: Transparently decrypted legacy AES-256-GCM v1.0 lockfiles and re-encrypted them in place to XChaCha20-Poly1305.
-  - Memory zeroization: Enhanced `Secrets(Zeroizing<BTreeMap<String, Zeroizing<String>>>)` to scrub both key and value buffers from heap memory on drop.
-  - Configurable lockfile generation: Updated `InterLock::new` to accept custom `KdfParams` and cipher algorithm parameters.
-  - Terminal signal handling: Registered SIGHUP and SIGTERM handlers during `interenv edit` on Unix to guarantee immediate file shredding on abrupt terminal disconnection.
-  - Prebuild installer: Implemented functional prebuilt binary detection and installer in Node SDK `scripts/install.js`.
-  - UX clarity: Streamlined `interenv show --raw` to reject unrevealed masking requests with an informative guidance notice.
+### Major Release (v1.0.0 Release Candidate & General Availability)
+
+#### Section 1: Complete Hardware KEK Implementation
+- **macOS Secure Enclave**: Added direct Apple Security framework integration (`src/enclave/macos_secure_enclave.rs`) using `SecKeyGenerate` with `ec_sec_key_transport_secp256r1`, user presence access control, and ECIES decryption via `SecKeyAlgorithm::ECIESEncryptionCofactorVariableIVX963SHA256AESGCM` (`macos-secure-enclave-v1`), with transparent fallback to Keychain software KEK.
+- **Linux TPM 2.0**: Added optional `tss-esapi` hardware TPM 2.0 KEK binding (`src/enclave/linux_tpm.rs`) under `features = ["tpm"]`, with primary AES/RSA key binding and hardware-derived mask XOR encryption (`linux-tpm2-v1`).
+
+#### Section 2: Supply Chain Hardening
+- **Cargo Sparse Registry & Lockfile**: Switched crates.io to sparse protocol and CLI git fetch in `.cargo/config.toml`. Enforced committed `Cargo.lock` integrity in CI.
+- **cargo-audit & cargo-deny**: Integrated `.github/workflows/security.yml` with `audit-check`, `cargo-deny` with `deny.toml` (licenses, bans, sources, advisories), and `cargo-outdated`.
+- **Reproducible Builds**: Configured release profile with `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = "symbols"`, `overflow-checks = true`, debug stripped, and `--remap-path-prefix` rustflag in `.cargo/config.toml`. Added `scripts/verify-reproducible-build.sh`.
+
+#### Section 3: Comprehensive Test Coverage
+- **Fuzz Testing**: Implemented standalone `fuzz/` workspace with 3 LibFuzzer targets: `parse_dotenv`, `decrypt_payload`, and `kdf_input`. Added fuzz job to GitHub Actions CI.
+- **Crypto Property Testing**: Added `tests/crypto_proptest.rs` testing arbitrary size round-trips up to 4096 bytes, ciphertext bit tampering detection, nonce bit tampering detection, and 50,000-iteration nonce collision resistance.
+- **Cross-Platform Integration Tests**: Added `tests/cross_platform.rs` verifying Linux hole punching, seccomp ptrace blocking, macOS sandbox root write restrictions, and Windows Job Object child lifecycle.
+
+#### Section 4: Security Policy & Disclosure
+- **Threat Model & Reporting**: Augmented `SECURITY.md` with explicit Threat Model v1.0, documented protected/unprotected attack surfaces, and 72-hour coordinated disclosure contact.
+- **RFC 9116 security.txt**: Added root `security.txt` pointing to security contact and canonical advisory URL.
+
+#### Section 5: CI/CD Hardening
+- **Multi-OS Matrix**: Upgraded `.github/workflows/ci.yml` across Ubuntu, macOS, and Windows with both `stable` and `beta` Rust toolchains, testing `--release --locked` builds, clippy, and rustfmt.
+- **Developer Pre-commit Config**: Created `.pre-commit-config.yaml` for automated repository hygiene (formatting, linting, TOML, YAML).
+
+#### Section 6: Comprehensive Documentation
+- **THREAT_MODEL.md**: Authored comprehensive security threat model covering assets, adversaries, trust boundaries, mitigations, and residual risks.
+- **ARCHITECTURE.md**: Documented system architecture with layer diagrams covering crypto, storage, execution, shredder, git, and Node SDK.
+- **README.md**: Expanded with comparative tool analysis (dotenv-vault, sops, git-crypt), security guarantees matrix, platform support matrix, limitations, and reproducible build instructions.
+
+#### Section 7: Performance Benchmarks
+- **Criterion Benchmarks**: Created `benches/crypto.rs` benchmarking 4KiB encryption, 4KiB decryption, and Argon2id KDF derivation.
+
+#### Section 8: Container Images & Release Automation
+- **Dockerfile**: Multi-stage Debian Bookworm container with TPM 2.0 system libraries (`libtss2-dev`) and `tini` entrypoint.
+- **Release Workflow**: Configured `.github/workflows/release.yml` with multi-OS artifact uploads and automated GHCR OCI container publishing on release tags.
+
+#### Section 9: Final Code Quality & Audit
+- **Unsafe Code Elimination**: Verified every `unsafe` block across all modules with concise safety invariant comments (max 3 lines).
+- **Zero Undocumented Items**: Enforced `#![deny(missing_docs)]` in `src/lib.rs` and documented all public types, functions, and modules.
+- **Strict Clippy**: Configured `[lints.clippy]` with `pedantic = "warn"` and resolved all lint warnings.
+
+#### Section 10: Backward Compatibility & Cleanups
+- **Lockfile Schema v3.0**: Bumped schema to `v3.0` with `min_compatible_version: "1.0"`. Added validation rejecting obsolete or incompatible lockfile revisions.
+- **Deprecated aes-gcm**: Completely purged legacy `aes-gcm` crate from dependencies and codebase.
 
 Summary of fixes from the InterEnv v0.1.0 Security Audit across cryptography, process isolation, schema migration, and pre-commit protection.
 

@@ -5,9 +5,12 @@ use zeroize::Zeroizing;
 
 const SERVICE_NAME: &str = "interenv";
 
+/// Master key wrapped with a platform-specific Key Encryption Key (KEK).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WrappedMasterKey {
+    /// Identifier of the Key Encryption Key scheme used to wrap the master key.
     pub kek_id: String,
+    /// Wrapped master key ciphertext bytes.
     pub wrapped: Vec<u8>,
 }
 
@@ -36,6 +39,7 @@ fn wrap_key_ncrypt(project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
     };
 
     let mut prov = NCRYPT_PROV_HANDLE::default();
+    // SAFETY: MS_PLATFORM_CRYPTO_PROVIDER is a valid provider name and prov receives handle.
     let open_res = unsafe { NCryptOpenStorageProvider(&mut prov, MS_PLATFORM_CRYPTO_PROVIDER, 0) };
     if open_res.is_err() {
         return Err("TPM provider unavailable".to_string());
@@ -45,6 +49,7 @@ fn wrap_key_ncrypt(project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
     let key_name_w: Vec<u16> = key_name.encode_utf16().chain(std::iter::once(0)).collect();
     let mut key_handle = NCRYPT_KEY_HANDLE::default();
 
+    // SAFETY: key_name_w is a valid null-terminated wide string buffer.
     let open_key_res = unsafe {
         NCryptOpenKey(
             prov,
@@ -56,6 +61,7 @@ fn wrap_key_ncrypt(project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
     };
 
     if open_key_res.is_err() {
+        // SAFETY: prov is an open provider handle and key_name_w is null-terminated UTF-16.
         let create_res = unsafe {
             NCryptCreatePersistedKey(
                 prov,
@@ -67,14 +73,17 @@ fn wrap_key_ncrypt(project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
             )
         };
         if create_res.is_err() {
+            // SAFETY: prov is an open provider handle released upon creation failure.
             unsafe {
                 let _ = NCryptFreeObject(prov);
             }
             return Err("Failed to create persisted TPM key".to_string());
         }
 
+        // SAFETY: key_handle is a newly created persisted key handle.
         let finalize_res = unsafe { NCryptFinalizeKey(key_handle, NCRYPT_FLAGS(0)) };
         if finalize_res.is_err() {
+            // SAFETY: handles are valid and released upon finalization error.
             unsafe {
                 let _ = NCryptFreeObject(key_handle);
                 let _ = NCryptFreeObject(prov);
@@ -84,6 +93,7 @@ fn wrap_key_ncrypt(project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
     }
 
     let mut result_len = 0u32;
+    // SAFETY: key_handle is valid; querying length with null output buffer.
     let query_res = unsafe {
         NCryptEncrypt(
             key_handle,
@@ -95,6 +105,7 @@ fn wrap_key_ncrypt(project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
         )
     };
     if query_res.is_err() || result_len == 0 {
+        // SAFETY: handles are valid and released on query failure.
         unsafe {
             let _ = NCryptFreeObject(key_handle);
             let _ = NCryptFreeObject(prov);
@@ -103,6 +114,7 @@ fn wrap_key_ncrypt(project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
     }
 
     let mut ciphertext = vec![0u8; result_len as usize];
+    // SAFETY: key_handle is valid and ciphertext has capacity of at least result_len bytes.
     let enc_res = unsafe {
         NCryptEncrypt(
             key_handle,
@@ -114,6 +126,7 @@ fn wrap_key_ncrypt(project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
         )
     };
 
+    // SAFETY: key_handle and prov are valid handles being released.
     unsafe {
         let _ = NCryptFreeObject(key_handle);
         let _ = NCryptFreeObject(prov);
@@ -135,6 +148,7 @@ fn unwrap_key_ncrypt(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Strin
     };
 
     let mut prov = NCRYPT_PROV_HANDLE::default();
+    // SAFETY: MS_PLATFORM_CRYPTO_PROVIDER is a valid provider name and prov receives handle.
     let open_res = unsafe { NCryptOpenStorageProvider(&mut prov, MS_PLATFORM_CRYPTO_PROVIDER, 0) };
     if open_res.is_err() {
         return Err("TPM provider unavailable".to_string());
@@ -144,6 +158,7 @@ fn unwrap_key_ncrypt(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Strin
     let key_name_w: Vec<u16> = key_name.encode_utf16().chain(std::iter::once(0)).collect();
     let mut key_handle = NCRYPT_KEY_HANDLE::default();
 
+    // SAFETY: key_name_w is a valid null-terminated wide string buffer.
     let open_key_res = unsafe {
         NCryptOpenKey(
             prov,
@@ -154,6 +169,7 @@ fn unwrap_key_ncrypt(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Strin
         )
     };
     if open_key_res.is_err() {
+        // SAFETY: prov is an open provider handle released on error.
         unsafe {
             let _ = NCryptFreeObject(prov);
         }
@@ -161,6 +177,7 @@ fn unwrap_key_ncrypt(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Strin
     }
 
     let mut result_len = 0u32;
+    // SAFETY: key_handle is valid; querying length with null output buffer.
     let query_res = unsafe {
         NCryptDecrypt(
             key_handle,
@@ -172,6 +189,7 @@ fn unwrap_key_ncrypt(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Strin
         )
     };
     if query_res.is_err() || result_len == 0 {
+        // SAFETY: handles are valid and released on query failure.
         unsafe {
             let _ = NCryptFreeObject(key_handle);
             let _ = NCryptFreeObject(prov);
@@ -180,6 +198,7 @@ fn unwrap_key_ncrypt(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Strin
     }
 
     let mut plaintext = vec![0u8; result_len as usize];
+    // SAFETY: key_handle is valid and plaintext has capacity of at least result_len bytes.
     let dec_res = unsafe {
         NCryptDecrypt(
             key_handle,
@@ -191,6 +210,7 @@ fn unwrap_key_ncrypt(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Strin
         )
     };
 
+    // SAFETY: key_handle and prov are valid handles being released.
     unsafe {
         let _ = NCryptFreeObject(key_handle);
         let _ = NCryptFreeObject(prov);
@@ -225,6 +245,7 @@ fn wrap_key_dpapi(project_id: &str, master_key: &[u8; 32]) -> Result<(String, Ve
         pbData: entropy_bytes.as_mut_ptr(),
     };
     let mut data_out = CRYPT_INTEGER_BLOB::default();
+    // SAFETY: data_in and entropy_blob point to valid contiguous memory buffers.
     let res = unsafe {
         CryptProtectData(
             &data_in,
@@ -239,8 +260,10 @@ fn wrap_key_dpapi(project_id: &str, master_key: &[u8; 32]) -> Result<(String, Ve
     if res.is_err() {
         return Err("DPAPI encryption error: could not wrap key".into());
     }
+    // SAFETY: data_out.pbData points to data_out.cbData bytes allocated by DPAPI.
     let slice = unsafe { std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize) };
     let vec = slice.to_vec();
+    // SAFETY: data_out.pbData was allocated by Win32 DPAPI and is freed with LocalFree.
     unsafe {
         let _ = LocalFree(data_out.pbData as _);
     }
@@ -260,6 +283,7 @@ fn unwrap_key_dpapi(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String
         pbData: entropy_bytes.as_mut_ptr(),
     };
     let mut data_out = CRYPT_INTEGER_BLOB::default();
+    // SAFETY: data_in and entropy_blob point to valid contiguous memory buffers.
     let res = unsafe {
         CryptUnprotectData(
             &data_in,
@@ -274,8 +298,10 @@ fn unwrap_key_dpapi(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String
     if res.is_err() {
         return Err("DPAPI decryption error: could not unwrap key".into());
     }
+    // SAFETY: data_out.pbData points to data_out.cbData bytes allocated by DPAPI.
     let slice = unsafe { std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize) };
     if slice.len() != 32 {
+        // SAFETY: data_out.pbData is allocated by Win32 DPAPI and freed with LocalFree on error.
         unsafe {
             let _ = LocalFree(data_out.pbData as _);
         }
@@ -283,6 +309,7 @@ fn unwrap_key_dpapi(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String
     }
     let mut key = [0u8; 32];
     key.copy_from_slice(slice);
+    // SAFETY: data_out.pbData was allocated by Win32 DPAPI and is freed with LocalFree.
     unsafe {
         let _ = LocalFree(data_out.pbData as _);
     }
@@ -307,29 +334,23 @@ fn unwrap_key_platform(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Str
 
 #[cfg(target_os = "macos")]
 fn wrap_key_platform(project_id: &str, master_key: &[u8; 32]) -> Result<(String, Vec<u8>), String> {
-    let kek = derive_kek_mask(project_id);
-    let mut masked = [0u8; 32];
-    for i in 0..32 {
-        masked[i] = master_key[i] ^ kek[i];
-    }
-    Ok(("macos-keychain-kek-v2".to_string(), masked.to_vec()))
+    crate::enclave::macos_secure_enclave::wrap_key_secure_enclave(project_id, master_key)
 }
 
 #[cfg(target_os = "macos")]
 fn unwrap_key_platform(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String> {
-    if wrapped.len() != 32 {
-        return Err("Stored keyring key is not 32 bytes".into());
-    }
-    let kek = derive_kek_mask(project_id);
-    let mut key = [0u8; 32];
-    for i in 0..32 {
-        key[i] = wrapped[i] ^ kek[i];
-    }
-    Ok(key)
+    crate::enclave::macos_secure_enclave::unwrap_key_secure_enclave(project_id, wrapped)
 }
 
 #[cfg(target_os = "linux")]
 fn wrap_key_platform(project_id: &str, master_key: &[u8; 32]) -> Result<(String, Vec<u8>), String> {
+    #[cfg(feature = "tpm")]
+    {
+        if let Ok(res) = crate::enclave::linux_tpm::wrap_key_tpm2(project_id, master_key) {
+            return Ok(res);
+        }
+    }
+
     let tpm_active = std::path::Path::new("/sys/class/tpm/tpm0/device/active").exists()
         || std::path::Path::new("/dev/tpmrm0").exists()
         || std::path::Path::new("/dev/tpm0").exists();
@@ -353,6 +374,13 @@ fn wrap_key_platform(project_id: &str, master_key: &[u8; 32]) -> Result<(String,
 
 #[cfg(target_os = "linux")]
 fn unwrap_key_platform(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String> {
+    #[cfg(feature = "tpm")]
+    {
+        if let Ok(res) = crate::enclave::linux_tpm::unwrap_key_tpm2(project_id, wrapped) {
+            return Ok(res);
+        }
+    }
+
     if wrapped.len() != 32 {
         return Err("Stored keyring key is not 32 bytes".into());
     }
@@ -387,6 +415,7 @@ fn unwrap_key_platform(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Str
     Ok(key)
 }
 
+/// Wraps and stores a 256-bit master key in the platform OS / hardware keyring.
 pub fn store_key(project_id: &str, master_key: &[u8; 32]) -> Result<WrappedMasterKey, String> {
     let entry = Entry::new(SERVICE_NAME, project_id)
         .map_err(|e| format!("Keyring initialization error: {}", e))?;
@@ -401,6 +430,7 @@ pub fn store_key(project_id: &str, master_key: &[u8; 32]) -> Result<WrappedMaste
     Ok(WrappedMasterKey { kek_id, wrapped })
 }
 
+/// Retrieves and unwraps the 256-bit master key from the platform OS / hardware keyring.
 pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
     let entry = Entry::new(SERVICE_NAME, project_id)
         .map_err(|e| format!("Keyring initialization error: {}", e))?;
@@ -433,12 +463,38 @@ pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
         unwrap_key_platform(project_id, &wrapped)?
     };
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let raw_key = if _kek_id == "macos-secure-enclave-v1" {
+        crate::enclave::macos_secure_enclave::unwrap_key_secure_enclave(project_id, &wrapped)
+            .or_else(|_| {
+                crate::enclave::macos_secure_enclave::unwrap_key_macos_keychain_software(
+                    project_id, &wrapped,
+                )
+            })?
+    } else {
+        unwrap_key_platform(project_id, &wrapped)?
+    };
+
+    #[cfg(target_os = "linux")]
+    let raw_key = {
+        #[cfg(feature = "tpm")]
+        if _kek_id == "linux-tpm2-v1" {
+            crate::enclave::linux_tpm::unwrap_key_tpm2(project_id, &wrapped)
+                .or_else(|_| unwrap_key_platform(project_id, &wrapped))?
+        } else {
+            unwrap_key_platform(project_id, &wrapped)?
+        }
+        #[cfg(not(feature = "tpm"))]
+        unwrap_key_platform(project_id, &wrapped)?
+    };
+
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     let raw_key = unwrap_key_platform(project_id, &wrapped)?;
 
     Ok(Zeroizing::new(raw_key))
 }
 
+/// Deletes the master key entry for a given project from the platform keyring.
 pub fn delete_key(project_id: &str) -> Result<(), String> {
     let entry = Entry::new(SERVICE_NAME, project_id)
         .map_err(|e| format!("Keyring initialization error: {}", e))?;

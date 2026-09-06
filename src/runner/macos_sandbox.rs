@@ -1,3 +1,4 @@
+/// Install the Apple Sandbox profile confining process writes and denying network outbound.
 #[cfg(target_os = "macos")]
 pub fn install() -> Result<(), String> {
     let profile = r#"
@@ -20,11 +21,14 @@ pub fn install() -> Result<(), String> {
 
     let profile_c = std::ffi::CString::new(profile).map_err(|e| e.to_string())?;
     let mut err_buf: *mut u8 = std::ptr::null_mut();
+    // SAFETY: sandbox_init receives a valid null-terminated C-string profile
+    // and a pointer to receive any error buffer allocated by libsandbox.
     let rc = unsafe { sandbox_init(profile_c.as_ptr() as *const u8, 0, &mut err_buf) };
     if rc != 0 {
         let msg = if err_buf.is_null() {
             "unknown".to_string()
         } else {
+            // SAFETY: err_buf points to a valid null-terminated C string on error.
             let cstr = unsafe { std::ffi::CStr::from_ptr(err_buf as *const i8) };
             cstr.to_string_lossy().into_owned()
         };

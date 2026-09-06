@@ -1,5 +1,11 @@
+/// Passphrase fallback implementation.
 pub mod fallback;
+/// OS and hardware keyring backend abstraction.
 pub mod keyring_backend;
+/// Linux TPM 2.0 hardware KEK integration.
+pub mod linux_tpm;
+/// macOS Secure Enclave hardware KEK integration.
+pub mod macos_secure_enclave;
 
 use crate::envfile::lockfile::KeyProviderType;
 use zeroize::Zeroizing;

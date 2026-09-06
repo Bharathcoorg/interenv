@@ -7,10 +7,12 @@ use std::path::{Path, PathBuf};
 /// RAII Guard that automatically shreds and unlinks a sensitive temporary file on drop.
 #[derive(Debug)]
 pub struct TempFileGuard {
+    /// Path to the protected temporary file.
     pub path: PathBuf,
 }
 
 impl TempFileGuard {
+    /// Create a new TempFileGuard wrapping a temporary file path.
     pub fn new(path: PathBuf) -> Self {
         Self { path }
     }
@@ -36,17 +38,19 @@ pub fn shred_file<P: AsRef<Path>>(path: P) -> Result<(), String> {
         return Ok(());
     }
 
-    let metadata = fs::metadata(p).map_err(|e| format!("Cannot read file metadata: {}", e))?;
-    let file_len = metadata.len() as usize;
+    let file_len = match fs::metadata(p) {
+        Ok(m) => m.len() as usize,
+        Err(e) => return Err(format!("Cannot read metadata for {}: {}", p.display(), e)),
+    };
 
     if file_len > 0 {
-        // Pass 1: Zeroes
+        // Pass 1: All 0x00
         overwrite_pattern(p, file_len, 0x00)?;
 
-        // Pass 2: Ones
+        // Pass 2: All 0xFF
         overwrite_pattern(p, file_len, 0xFF)?;
 
-        // Pass 3: Random cryptosecure bytes
+        // Pass 3: CSPRNG Random Bytes
         let mut file = OpenOptions::new()
             .write(true)
             .open(p)
@@ -91,6 +95,7 @@ fn platform_post_shred(path: &Path) -> Result<(), String> {
 
     if let Ok(file) = OpenOptions::new().write(true).open(path) {
         let handle = HANDLE(file.as_raw_handle() as _);
+        // SAFETY: handle is derived from a valid open file with write permissions.
         unsafe {
             let _ = SetFileValidData(handle, 0);
             let _ = SetEndOfFile(handle);
@@ -100,6 +105,8 @@ fn platform_post_shred(path: &Path) -> Result<(), String> {
     let mut wide_path: Vec<u16> = path.as_os_str().encode_wide().collect();
     wide_path.push(0);
 
+    // SAFETY: FindFirstStreamW and FindNextStreamW operate on a valid null-terminated
+    // wide path string and write stream info into find_data.
     unsafe {
         let mut find_data = WIN32_FIND_STREAM_DATA::default();
         let handle_res = FindFirstStreamW(
@@ -134,6 +141,7 @@ fn platform_post_shred(path: &Path) -> Result<(), String> {
         let fd = file.as_raw_fd();
         let len = file.metadata().map(|m| m.len() as i64).unwrap_or(0);
         if len > 0 {
+            // SAFETY: fallocate and ioctl are invoked with valid open file descriptor and length.
             unsafe {
                 let _ = libc::fallocate(fd, 0x03, 0, len);
                 let mut range: [u64; 2] = [0, len as u64];
@@ -150,6 +158,7 @@ fn platform_post_shred(path: &Path) -> Result<(), String> {
     use std::os::unix::io::AsRawFd;
     if let Ok(file) = OpenOptions::new().write(true).open(path) {
         let fd = file.as_raw_fd();
+        // SAFETY: fcntl 51 (F_FULLFSYNC) flushes write buffers to non-volatile storage.
         unsafe {
             let _ = libc::fcntl(fd, 51);
         }

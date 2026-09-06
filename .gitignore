@@ -1,8 +1,12 @@
-/target
+target/
+**/target/
 **/*.rs.bk
-Cargo.lock
 .interenv.lock
 .env
 .env.*
-node_modules
-dist
+node_modules/
+dist/
+build/
+__pycache__/
+**/*.pyc
+*.egg-info/

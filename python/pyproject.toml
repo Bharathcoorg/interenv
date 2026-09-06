@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "interenv"
+version = "1.0.0"
+authors = [
+  { name = "Bharath B R", email = "bharathcoorg7@gmail.com" },
+]
+description = "Hardware-Enclave Protected Secrets for Python & AI Agents (Zero Plaintext .env on Disk) by Interlayer"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+keywords = [
+    "interenv",
+    "dotenv",
+    "python-dotenv",
+    "dotenv-vault",
+    "infisical-alternative",
+    "doppler-alternative",
+    "secrets",
+    "secrets-management",
+    "zero-plaintext",
+    "security",
+    "enclave",
+    "tpm",
+    "tpm2",
+    "secure-enclave",
+    "touchid",
+    "ai-agents",
+    "agentic-ai",
+    "langchain",
+    "llamaindex",
+    "fastapi",
+    "django",
+    "llm-security",
+    "api-keys",
+    "environment-variables",
+    "cryptography",
+    "interlayer"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/Bharathcoorg/interenv"
+"Bug Tracker" = "https://github.com/Bharathcoorg/interenv/issues"
+"Documentation" = "https://github.com/Bharathcoorg/interenv#readme"

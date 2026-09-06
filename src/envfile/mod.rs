@@ -1,4 +1,6 @@
+/// Lockfile schema and serialization.
 pub mod lockfile;
+/// Dotenv file syntax parser and formatter.
 pub mod parser;
 
 use std::collections::BTreeMap;
@@ -8,14 +10,17 @@ use zeroize::{Zeroize, Zeroizing};
 pub use lockfile::{InterLock, KeyProviderType, DEFAULT_LOCK_FILE};
 pub use parser::{format_dotenv, is_valid_env_key, parse_dotenv, EnvMap};
 
+/// Secure wrapper for environment secrets ensuring in-place heap memory zeroization on drop.
 #[derive(Debug, Clone, Default)]
 pub struct Secrets(BTreeMap<String, Zeroizing<String>>);
 
 impl Secrets {
+    /// Construct a Secrets container wrapping a map of zeroizing values.
     pub fn new(map: BTreeMap<String, Zeroizing<String>>) -> Self {
         Self(map)
     }
 
+    /// Construct a Secrets container from an existing EnvMap.
     pub fn from_env_map(env_map: &EnvMap) -> Self {
         let mut inner = BTreeMap::new();
         for (k, v) in env_map {
@@ -24,9 +29,10 @@ impl Secrets {
         Self(inner)
     }
 
+    /// Convert back to an EnvMap.
     pub fn to_env_map(&self) -> EnvMap {
         let mut map = EnvMap::new();
-        for (k, v) in self.0.iter() {
+        for (k, v) in &self.0 {
             map.insert(k.clone(), (**v).clone());
         }
         map
@@ -49,6 +55,8 @@ impl DerefMut for Secrets {
 impl Drop for Secrets {
     fn drop(&mut self) {
         for (k, v) in self.0.iter_mut() {
+            // SAFETY: k.as_ptr() points to valid String buffer of length k.len() which
+            // is safe to wipe immediately before dropping the BTreeMap allocation.
             let k_slice = unsafe { std::slice::from_raw_parts_mut(k.as_ptr() as *mut u8, k.len()) };
             k_slice.zeroize();
             v.zeroize();
@@ -60,6 +68,8 @@ impl Drop for Secrets {
 impl Zeroize for Secrets {
     fn zeroize(&mut self) {
         for (k, v) in self.0.iter_mut() {
+            // SAFETY: k.as_ptr() points to valid String buffer of length k.len() which
+            // is safe to wipe immediately before clearing map entries.
             let k_slice = unsafe { std::slice::from_raw_parts_mut(k.as_ptr() as *mut u8, k.len()) };
             k_slice.zeroize();
             v.zeroize();

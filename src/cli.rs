@@ -1,19 +1,22 @@
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
+/// Top-level command-line argument parser.
 #[derive(Parser, Debug)]
 #[command(
     name = "interenv",
     author = "Bharath B R <bharathcoorg7@gmail.com>",
-    version = "0.1.0",
+    version = "1.0.0",
     about = "🛡️  Hardware-Enclave Protected Secrets for Terminal & Git (Zero Plaintext .env on Disk) by Interlayer",
     long_about = "InterEnv eliminates plaintext secrets from developer machines. It encrypts project .env files directly into your OS Hardware Security Enclave (TouchID, TPM 2.0, Windows Hello) and injects decrypted secrets directly into volatile process memory at runtime."
 )]
 pub struct Cli {
+    /// Subcommand to invoke.
     #[command(subcommand)]
     pub command: Commands,
 }
 
+/// Available subcommands for InterEnv.
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// 🔒 Seal an existing .env file into the hardware enclave and securely shred the plaintext
@@ -44,6 +47,7 @@ pub enum Commands {
     Shred(ShredArgs),
 }
 
+/// Arguments for the `lock` command.
 #[derive(Args, Debug)]
 pub struct LockArgs {
     /// Path to the plaintext environment file to seal (defaults to .env)
@@ -67,6 +71,7 @@ pub struct LockArgs {
     pub force: bool,
 }
 
+/// Arguments for the `run` command.
 #[derive(Args, Debug)]
 pub struct RunArgs {
     /// The command to execute with vaulted secrets in memory
@@ -74,6 +79,7 @@ pub struct RunArgs {
     pub command: Vec<String>,
 }
 
+/// Arguments for the `edit` command.
 #[derive(Args, Debug)]
 pub struct EditArgs {
     /// Path to the lockfile (defaults to searching current and parent directories)
@@ -85,6 +91,7 @@ pub struct EditArgs {
     pub force: bool,
 }
 
+/// Arguments for the `show` command.
 #[derive(Args, Debug)]
 pub struct ShowArgs {
     /// Unmask and display raw plaintext values on screen
@@ -100,12 +107,15 @@ pub struct ShowArgs {
     pub json: bool,
 }
 
+/// Arguments for the `hook` command.
 #[derive(Args, Debug)]
 pub struct HookArgs {
+    /// Subcommand action for hook management.
     #[command(subcommand)]
     pub action: HookAction,
 }
 
+/// Hook actions for managing Git pre-commit security guards.
 #[derive(Subcommand, Debug)]
 pub enum HookAction {
     /// Install pre-commit security hook in .git/hooks
@@ -114,6 +124,7 @@ pub enum HookAction {
     Uninstall,
 }
 
+/// Arguments for the `shred` command.
 #[derive(Args, Debug)]
 pub struct ShredArgs {
     /// Path of the file to securely shred with DoD 5220.22-M 3-pass overwrite

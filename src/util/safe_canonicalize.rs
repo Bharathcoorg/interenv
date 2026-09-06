@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+/// Resolve and canonicalize path strictly, rejecting untrusted symlinks and reparse points.
 pub fn safe_canonicalize(path: &Path) -> Result<PathBuf, String> {
     if !path.exists() {
         return Err(format!("Path does not exist: {}", path.display()));
@@ -23,6 +24,7 @@ pub fn safe_canonicalize(path: &Path) -> Result<PathBuf, String> {
 
         let handle = windows::Win32::Foundation::HANDLE(file.as_raw_handle() as _);
         let mut buffer = vec![0u16; 1024];
+        // SAFETY: GetFinalPathNameByHandleW receives a valid file handle and preallocated buffer.
         let len = unsafe {
             GetFinalPathNameByHandleW(
                 handle,

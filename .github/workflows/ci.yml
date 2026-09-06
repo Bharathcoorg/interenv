@@ -1,22 +1,19 @@
 name: CI
 
-on:
-  push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
+on: [push, pull_request]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   test:
-    name: Test on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Test on ${{ matrix.os }} (${{ matrix.rust }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable, beta]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -27,8 +24,9 @@ jobs:
           sudo apt-get install -y libdbus-1-dev pkg-config
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ matrix.rust }}
           components: clippy, rustfmt
 
       - name: Rust Cache
@@ -37,14 +35,14 @@ jobs:
       - name: Check Formatting
         run: cargo fmt --all -- --check
 
-      - name: Clippy Linter
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Build Release Binary
+        run: cargo build --release --locked --all-targets
 
       - name: Run Tests
-        run: cargo test --all --verbose
+        run: cargo test --release --locked
 
-      - name: Build Release Binary
-        run: cargo build --release --verbose
+      - name: Clippy Linter
+        run: cargo clippy --release --all-targets --locked -- -D warnings
 
   node:
     name: NPM SDK & Packaging Check
@@ -60,10 +58,55 @@ jobs:
       - name: Verify Package Packing
         run: npm pack --dry-run
 
+  python:
+    name: Python SDK & Packaging Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Build Tools
+        run: pip install --upgrade build setuptools
+
+      - name: Build Python Distribution Wheel
+        run: |
+          cd python
+          python -m build
+
+  go:
+    name: Go SDK Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Build and Test Go SDK
+        run: |
+          cd go/interenv
+          go vet ./...
+          go test -v ./...
+
   publish-check:
     name: Cargo Publish Check
     runs-on: ubuntu-latest
-    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish Dry-Run Check
+        run: cargo publish --dry-run --locked
+
+  fuzz:
+    name: Fuzz Testing (main only)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -72,8 +115,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libdbus-1-dev pkg-config
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Nightly Rust
+        uses: dtolnay/rust-toolchain@nightly
 
-      - name: Publish Dry-Run Check
-        run: cargo publish --dry-run --allow-dirty
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Run parse_dotenv fuzzer
+        run: cd fuzz && cargo fuzz run parse_dotenv -- -max_total_time=60
+
+      - name: Run decrypt_payload fuzzer
+        run: cd fuzz && cargo fuzz run decrypt_payload -- -max_total_time=60
+
+      - name: Run kdf_input fuzzer
+        run: cd fuzz && cargo fuzz run kdf_input -- -max_total_time=60
+

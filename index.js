@@ -1,5 +1,5 @@
 /**
- * InterEnv JavaScript / TypeScript SDK v0.1.0
+ * InterEnv JavaScript / TypeScript SDK v1.0.0
  * Hardware-Enclave Protected Secrets for Terminal & Node.js by Interlayer
  */
 

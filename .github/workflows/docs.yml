@@ -1,0 +1,36 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '*.md'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '*.md'
+
+jobs:
+  check-docs:
+    name: Validate Documentation & Links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Docs Files Presence
+        run: |
+          for file in docs/QUICKSTART.md docs/INTEGRATION_GUIDE.md docs/SECURITY_MODEL.md docs/CI_CD_WORKFLOWS.md docs/API_REFERENCE.md THREAT_MODEL.md ARCHITECTURE.md README.md SECURITY.md; do
+            if [ ! -f "$file" ]; then
+              echo "Error: Missing required documentation file $file" >&2
+              exit 1
+            fi
+          done
+          echo "All required documentation files are present."
+
+      - name: Check for Broken Markdown Links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --no-progress './docs/**/*.md' '*.md'
+        continue-on-error: true

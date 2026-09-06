@@ -1,5 +1,5 @@
 use clap::Parser;
-use colored::*;
+use colored::Colorize;
 use dialoguer::Confirm;
 use std::env;
 use std::fs;
@@ -15,9 +15,7 @@ use std::os::unix::fs::PermissionsExt;
 use interenv::cli::{
     Cli, Commands, EditArgs, HookAction, HookArgs, LockArgs, RunArgs, ShowArgs, ShredArgs,
 };
-use interenv::crypto::cipher::{
-    decrypt_payload, encrypt_payload, CIPHER_AES_256_GCM_LEGACY, CIPHER_XCHACHA20_POLY1305,
-};
+use interenv::crypto::cipher::{decrypt_payload, encrypt_payload, CIPHER_XCHACHA20_POLY1305};
 use interenv::crypto::kdf::{
     derive_key_from_passphrase, generate_random_key, generate_salt, OWASP_ARGON2_ITERATIONS,
     OWASP_ARGON2_MEM_KIB, OWASP_ARGON2_PARALLELISM,
@@ -149,8 +147,14 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
         println!("🔑 Storage: OWASP Argon2id Passphrase Shield");
     }
 
-    // Shred plaintext file
-    if !args.no_shred {
+    if args.no_shred {
+        println!(
+            "{}",
+            "⚠️  WARNING: Plaintext file was kept (--no-shred). Make sure not to commit it!"
+                .bold()
+                .yellow()
+        );
+    } else {
         println!(
             "{}",
             "🔥 Securely shredding plaintext file from disk (DoD 5220.22-M)...".yellow()
@@ -161,13 +165,6 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
             "{} Plaintext '{}' destroyed. Zero secrets remain on disk!",
             "✨".green(),
             args.file.display()
-        );
-    } else {
-        println!(
-            "{}",
-            "⚠️  WARNING: Plaintext file was kept (--no-shred). Make sure not to commit it!"
-                .bold()
-                .yellow()
         );
     }
 
@@ -207,8 +204,8 @@ fn load_and_decrypt_env(lockfile_path: Option<&Path>) -> Result<(InterLock, Secr
         serde_json::from_slice(&decrypted_bytes)
             .map_err(|e| format!("Decrypted data corruption: {}", e))?;
 
-    // If lockfile used legacy AES-256-GCM cipher or v1.0, transparently re-encrypt with XChaCha20
-    if lock.cipher == CIPHER_AES_256_GCM_LEGACY || lock.version == "1.0" {
+    // If lockfile used outdated version, transparently upgrade to latest schema
+    if lock.version != CURRENT_LOCK_VERSION {
         let json_bytes = Zeroizing::new(
             serde_json::to_vec(&env_map).map_err(|e| format!("Serialization error: {}", e))?,
         );

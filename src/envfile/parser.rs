@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+/// Type alias representing parsed environment variable key-value pairs.
 pub type EnvMap = BTreeMap<String, String>;
 
 /// Validate if a string is a valid environment variable key: `^[A-Za-z_.][A-Za-z0-9_.]*$`

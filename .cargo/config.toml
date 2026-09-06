@@ -1,0 +1,8 @@
+[net]
+git-fetch-with-cli = true
+
+[registries.crates-io]
+protocol = "sparse"
+
+[build]
+rustflags = ["--remap-path-prefix", "C:\\Users\\bhara\\Desktop\\Interlayer\\problems-to-solve\\interenv=."]

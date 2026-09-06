@@ -4,8 +4,8 @@ use zeroize::Zeroizing;
 
 use crate::crypto::kdf::derive_key_from_passphrase;
 
+/// Interactively prompts the user for a passphrase or reads it from the environment if CI is active.
 pub fn prompt_or_get_passphrase(prompt_text: &str) -> Result<Zeroizing<String>, String> {
-    // 1. Check if provided via environment variable, but ONLY if INTERENV_CI=1 is set
     if let Ok(val) = env::var("INTERENV_PASSPHRASE") {
         if !val.trim().is_empty() {
             if env::var("INTERENV_CI").map(|v| v == "1").unwrap_or(false) {
@@ -21,7 +21,6 @@ pub fn prompt_or_get_passphrase(prompt_text: &str) -> Result<Zeroizing<String>, 
         }
     }
 
-    // 2. Interactive terminal prompt with no-echo
     Password::new()
         .with_prompt(prompt_text)
         .interact()
@@ -29,6 +28,7 @@ pub fn prompt_or_get_passphrase(prompt_text: &str) -> Result<Zeroizing<String>, 
         .map_err(|e| format!("Password input error: {}", e))
 }
 
+/// Derives a 256-bit encryption key from a passphrase and salt using Argon2id.
 pub fn derive_passphrase_key(passphrase: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 32]>, String> {
     derive_key_from_passphrase(passphrase, salt)
 }

@@ -66,6 +66,8 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
     cmd.env("INTERENV_PROTECTED", "1");
 
     #[cfg(target_os = "linux")]
+    // SAFETY: pre_exec runs in forked child before exec; setsid detaches
+    // session and linux_seccomp installs BPF filter without heap allocations.
     unsafe {
         use std::os::unix::process::CommandExt;
         cmd.pre_exec(|| {
@@ -79,6 +81,8 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
     }
 
     #[cfg(target_os = "macos")]
+    // SAFETY: pre_exec runs in forked child before exec; setsid detaches
+    // session and macos_sandbox installs sandbox profile.
     unsafe {
         use std::os::unix::process::CommandExt;
         cmd.pre_exec(|| {
@@ -92,6 +96,7 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
     }
 
     #[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
+    // SAFETY: pre_exec runs in forked child before exec; setsid detaches session.
     unsafe {
         use std::os::unix::process::CommandExt;
         cmd.pre_exec(|| {
@@ -118,11 +123,13 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
             OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
         };
 
+        // SAFETY: Win32 CreateJobObjectW accepts null security attributes.
         let job_res = unsafe { CreateJobObjectW(None, None) };
         match job_res {
             Ok(job) => {
                 let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
                 info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                // SAFETY: SetInformationJobObject is called with valid job handle and matching struct size.
                 let set_res = unsafe {
                     SetInformationJobObject(
                         job,
@@ -132,10 +139,12 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
                     )
                 };
                 if set_res.is_ok() {
+                    // SAFETY: OpenProcess queries process handle by valid child id.
                     let process_handle = unsafe {
                         OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, child.id())
                     };
                     if let Ok(p_handle) = process_handle {
+                        // SAFETY: AssignProcessToJobObject assigns process; CloseHandle releases process handle.
                         let _ = unsafe { AssignProcessToJobObject(job, p_handle) };
                         let _ = unsafe { windows::Win32::Foundation::CloseHandle(p_handle) };
                     }
@@ -158,6 +167,7 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
         let pid = pid_clone.load(Ordering::SeqCst);
         if pid != 0 {
             #[cfg(unix)]
+            // SAFETY: libc::kill sends SIGINT to valid running child PID.
             unsafe {
                 libc::kill(pid as i32, libc::SIGINT);
             }

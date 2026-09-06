@@ -3,9 +3,13 @@ use rand::rngs::OsRng;
 use rand::RngCore;
 use zeroize::Zeroizing;
 
-pub const OWASP_ARGON2_MEM_KIB: u32 = 19 * 1024; // 19 MiB
+/// OWASP recommended memory cost for Argon2id (19 MiB).
+pub const OWASP_ARGON2_MEM_KIB: u32 = 19 * 1024;
+/// OWASP recommended iteration count for Argon2id.
 pub const OWASP_ARGON2_ITERATIONS: u32 = 2;
+/// OWASP recommended degree of parallelism for Argon2id.
 pub const OWASP_ARGON2_PARALLELISM: u32 = 1;
+/// Default derived master key output length in bytes.
 pub const ARGON2_OUTPUT_LEN: usize = 32;
 
 /// Generate 32 bytes of cryptographically secure random bytes for a master key.
@@ -65,6 +69,8 @@ fn get_available_memory_mb() -> Result<u64, String> {
         avail_extended_virtual: 0,
     };
 
+    // SAFETY: GlobalMemoryStatusEx receives a valid pointer to an initialized
+    // MemoryStatusEx struct whose length field is correctly set.
     let res = unsafe { GlobalMemoryStatusEx(&mut status) };
     if res != 0 {
         Ok(status.avail_phys / (1024 * 1024))
@@ -75,6 +81,7 @@ fn get_available_memory_mb() -> Result<u64, String> {
 
 #[cfg(target_os = "linux")]
 fn get_available_memory_mb() -> Result<u64, String> {
+    // SAFETY: libc::sysconf is called with valid system configuration query constants.
     unsafe {
         let pages = libc::sysconf(libc::_SC_AVPHYS_PAGES);
         let page_size = libc::sysconf(libc::_SC_PAGESIZE);
@@ -88,6 +95,7 @@ fn get_available_memory_mb() -> Result<u64, String> {
 
 #[cfg(all(unix, not(target_os = "linux")))]
 fn get_available_memory_mb() -> Result<u64, String> {
+    // SAFETY: libc::sysconf is called with valid POSIX system query constants.
     unsafe {
         let pages = libc::sysconf(libc::_SC_PHYS_PAGES);
         let page_size = libc::sysconf(libc::_SC_PAGESIZE);

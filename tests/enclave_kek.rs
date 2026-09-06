@@ -28,13 +28,15 @@ fn test_enclave_kek_roundtrip() {
     );
     #[cfg(target_os = "macos")]
     assert!(
-        wrapped.kek_id == "macos-secure-enclave" || wrapped.kek_id == "macos-keychain-kek-v2",
+        wrapped.kek_id == "macos-secure-enclave-v1"
+            || wrapped.kek_id == "macos-secure-enclave"
+            || wrapped.kek_id == "macos-keychain-kek-v2",
         "Unexpected macOS kek_id: {}",
         wrapped.kek_id
     );
     #[cfg(target_os = "linux")]
     assert!(
-        wrapped.kek_id.starts_with("interenv-kek-v2-linux"),
+        wrapped.kek_id == "linux-tpm2-v1" || wrapped.kek_id.starts_with("interenv-kek-v2-linux"),
         "Unexpected Linux kek_id: {}",
         wrapped.kek_id
     );

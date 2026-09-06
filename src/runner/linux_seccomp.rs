@@ -3,6 +3,7 @@ use seccompiler::{BpfProgram, SeccompAction, SeccompFilter, SeccompRule};
 #[cfg(target_os = "linux")]
 use std::collections::BTreeMap;
 
+/// Install the Linux seccomp BPF filter denying ptrace and memory inspection.
 #[cfg(target_os = "linux")]
 pub fn install() -> Result<(), String> {
     let mut rules: BTreeMap<i64, Vec<SeccompRule>> = BTreeMap::new();
@@ -32,6 +33,8 @@ pub fn install() -> Result<(), String> {
         .try_into()
         .map_err(|e| format!("BPF compile failed: {}", e))?;
 
+    // SAFETY: prctl is called with PR_SET_NO_NEW_PRIVS and 1 to prevent
+    // child processes from gaining elevated privileges via setuid binaries.
     let ret = unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) };
     if ret != 0 {
         return Err(format!(
@@ -47,6 +50,7 @@ pub fn install() -> Result<(), String> {
     Ok(())
 }
 
+/// Detect the target architecture for seccomp BPF compilation.
 #[cfg(target_os = "linux")]
 pub fn target_arch() -> seccompiler::TargetArch {
     #[cfg(target_arch = "x86_64")]

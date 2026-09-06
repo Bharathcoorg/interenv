@@ -48,6 +48,7 @@ echo "✅ InterEnv: Staged files & diff clear."
 exit 0
 "#;
 
+/// Discover the repository `.git` directory, supporting worktrees and submodules.
 pub fn find_git_dir(start_dir: &Path) -> Option<PathBuf> {
     // Try resolving via git rev-parse for full submodule / worktree fidelity
     if let Ok(output) = Command::new("git")
@@ -79,9 +80,13 @@ pub fn find_git_dir(start_dir: &Path) -> Option<PathBuf> {
             return Some(git_entry);
         } else if git_entry.is_file() {
             if let Ok(content) = fs::read_to_string(&git_entry) {
-                if let Some(path_str) = content.strip_prefix("gitdir:") {
-                    let p = PathBuf::from(path_str.trim());
-                    let resolved = if p.is_absolute() { p } else { curr.join(p) };
+                if let Some(gitdir) = content.trim().strip_prefix("gitdir:") {
+                    let gitdir_path = PathBuf::from(gitdir.trim());
+                    let resolved = if gitdir_path.is_absolute() {
+                        gitdir_path
+                    } else {
+                        curr.join(gitdir_path)
+                    };
                     if resolved.exists() {
                         return Some(resolved);
                     }
@@ -95,6 +100,7 @@ pub fn find_git_dir(start_dir: &Path) -> Option<PathBuf> {
     None
 }
 
+/// Install the automated pre-commit security hook in `.git/hooks/pre-commit`.
 pub fn install_pre_commit_hook(git_dir: &Path) -> Result<(), String> {
     let hooks_dir = git_dir.join("hooks");
     if !hooks_dir.exists() {
@@ -126,6 +132,7 @@ pub fn install_pre_commit_hook(git_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Remove the pre-commit security hook from `.git/hooks/pre-commit`.
 pub fn uninstall_pre_commit_hook(git_dir: &Path) -> Result<(), String> {
     let pre_commit_path = git_dir.join("hooks").join("pre-commit");
     if pre_commit_path.exists() {

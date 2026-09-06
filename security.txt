@@ -1,0 +1,4 @@
+Contact: mailto:security@interlayer.dev
+Expires: 2027-12-31T23:59:59z
+Preferred-Languages: en
+Canonical: https://github.com/Bharathcoorg/interenv/security/advisories
