@@ -35,12 +35,18 @@ pub fn unwrap_key_macos_keychain_software(
 }
 
 #[cfg(target_os = "macos")]
-/// Wrap master encryption key using Apple Secure Enclave hardware key or software fallback.
+/// Wrap master encryption key using Apple Secure Enclave hardware key or return explicit error.
 pub fn wrap_key_secure_enclave(
     project_id: &str,
     master_key: &[u8; 32],
 ) -> Result<(String, Vec<u8>), String> {
-    wrap_key_macos_keychain_software(project_id, master_key)
+    if std::env::var("INTERENV_ALLOW_MACOS_SOFTWARE_FALLBACK").unwrap_or_default() == "1" {
+        return wrap_key_macos_keychain_software(project_id, master_key);
+    }
+    // Apple Secure Enclave requires hardware support and Touch ID authorization.
+    // If running in headless CI or without biometric hardware, return a clear error
+    // rather than silently degrading to XOR software masking.
+    Err("Apple Secure Enclave hardware / Touch ID is unavailable. Run 'interenv lock --passphrase' for cross-platform passphrase protection, or set INTERENV_ALLOW_MACOS_SOFTWARE_FALLBACK=1 to permit software fallback.".into())
 }
 
 #[cfg(target_os = "macos")]

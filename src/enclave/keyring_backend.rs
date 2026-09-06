@@ -413,7 +413,10 @@ fn wrap_key_platform(project_id: &str, master_key: &[u8; 32]) -> Result<(String,
         || std::path::Path::new("/dev/tpm0").exists();
 
     if tpm_active {
-        eprintln!("ℹ️  TPM 2.0 detected; falling back to software KEK. Use 'interenv lock --passphrase' for passphrase-hardened keys in headless environments.");
+        eprintln!("⚠️  WARNING: TPM 2.0 unavailable or failed — falling back to software KEK.");
+        eprintln!("⚠️  This provides NO hardware security. Install TPM 2.0 or use --no-tpm to suppress.");
+    } else {
+        eprintln!("ℹ️  TPM 2.0 hardware device not detected; using software KEK. Use 'interenv lock --passphrase' for Argon2id protection.");
     }
 
     let kek = derive_kek_mask(project_id);
@@ -433,13 +436,22 @@ fn wrap_key_platform(project_id: &str, master_key: &[u8; 32]) -> Result<(String,
 fn unwrap_key_platform(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String> {
     #[cfg(feature = "tpm")]
     {
-        if let Ok(res) = crate::enclave::linux_tpm::unwrap_key_tpm2(project_id, wrapped) {
-            return Ok(res);
+        match crate::enclave::linux_tpm::unwrap_key_tpm2(project_id, wrapped) {
+            Ok(res) => return Ok(res),
+            Err(e) => {
+                let tpm_exists = std::path::Path::new("/dev/tpmrm0").exists()
+                    || std::path::Path::new("/dev/tpm0").exists();
+                if !tpm_exists {
+                    eprintln!("ℹ️  TPM not available: hardware device not found (/dev/tpmrm0)");
+                } else {
+                    eprintln!("⚠️  TPM operation failed: {e}");
+                }
+            }
         }
     }
 
     if wrapped.len() != 32 {
-        return Err("Stored keyring key is not 32 bytes".into());
+        return Err("Wrapped key format invalid: stored keyring key is not 32 bytes (wrong key or corruption)".into());
     }
     let kek = derive_kek_mask(project_id);
     let mut key = [0u8; 32];

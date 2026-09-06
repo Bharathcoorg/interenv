@@ -84,8 +84,14 @@ npx interenv --help
 ```bash
 git clone https://github.com/Bharathcoorg/interenv.git
 cd interenv
-cargo build --release
+cargo build --release --features tpm
 ```
+
+> [!NOTE]
+> **Real TPM 2.0 Support**: Linux hardware TPM 2.0 support requires building with `--features tpm`.
+> Without this flag, Linux falls back to software-based KEK protection.
+
+See [`INSTALL.md`](INSTALL.md) for full installation guides across Cargo, NPM, PyPI, Go, PHP, and Docker.
 
 ---
 

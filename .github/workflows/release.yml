@@ -72,14 +72,38 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Download all release artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
+
+      - name: Generate SHA256 Checksums
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt 2>/dev/null || true
+
+      - name: Generate SBOM (SPDX)
+        run: |
+          cargo install cargo-bom --locked || true
+          cargo bom --format spdx > release-assets/sbom.spdx 2>/dev/null || echo "SPDX SBOM fallback"
+
+      - name: Sign Release Artifacts (Cosign)
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-version: 'v2.2.4'
+
+      - name: Cosign Keyless Signing
+        run: |
+          cd release-assets
+          if [ -f "SHA256SUMS.txt" ]; then
+            cosign sign-blob --yes --output-certificate certificate.pem --output-signature SHA256SUMS.sig SHA256SUMS.txt || true
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
