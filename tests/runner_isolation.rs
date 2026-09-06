@@ -53,11 +53,14 @@ fn test_runner_isolation_linux_seccomp_blocks_ptrace() {
     let program = "/bin/sh";
     let args = vec![
         "-c".to_string(),
-        "grep -r '' /proc/self/mem > /dev/null 2>&1; echo done".to_string(),
+        "grep -r '' /proc/self/mem > /dev/null 2>&1 || exit 42".to_string(),
     ];
 
     let res = execute_with_env(program, &args, &secrets);
-    assert!(res.is_ok());
+    assert!(
+        res.is_err() || res.unwrap() == 42,
+        "Expected child process to be killed/failed by seccomp blocking ptrace"
+    );
 }
 
 #[cfg(target_os = "macos")]

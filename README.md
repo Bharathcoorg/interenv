@@ -261,6 +261,12 @@ echo getenv('OPENAI_API_KEY');
 > **Linux TPM 2.0 Hardware Binding**: Real Linux TPM 2.0 hardware binding requires building with `--features tpm` (`cargo build --release --features tpm`).
 > Without this flag or on machines lacking `/dev/tpmrm0`, Linux automatically utilizes secure Freedesktop Secret Service / software KEK protection.
 
+> [!WARNING]
+> **Windows Job Object Isolation & `unsafe_mode` Feature**:
+> Windows builds strictly enforce kernel Job Object isolation with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` to ensure all spawned child trees terminate immediately when `interenv` exits.
+> The optional Cargo feature `unsafe_mode` allows `INTERENV_UNSAFE=1` to bypass Windows Job Object isolation for headless or virtualized CI runners that lack nested Job Object permissions.
+> **Never compile or enable `unsafe_mode` in production environments.**
+
 ---
 
 ## ⚠️ Limitations

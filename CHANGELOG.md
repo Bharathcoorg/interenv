@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Section 10: Backward Compatibility & Cleanups
 - **Lockfile Schema v3.0**: Bumped schema to `v3.0` with `min_compatible_version: "1.0"`. Added validation rejecting obsolete or incompatible lockfile revisions.
 - **Deprecated aes-gcm**: Completely purged legacy `aes-gcm` crate from dependencies and codebase.
+- **`unsafe_mode` Feature Documentation**: Documented dangerous nature of `unsafe_mode` in `Cargo.toml` and `README.md`, which allows `INTERENV_UNSAFE=1` to bypass Windows Job Object process isolation strictly for headless CI environments.
 
 Summary of fixes from the InterEnv v0.1.0 Security Audit across cryptography, process isolation, schema migration, and pre-commit protection.
 
@@ -117,6 +118,19 @@ Summary of fixes from the InterEnv v0.1.0 Security Audit across cryptography, pr
   - Restricted Node.js child execution environment to a sanitized whitelist of environment variables.
   - Set `INTERENV_CI=1` automatically when a passphrase is provided to allow headless execution.
   - Enforced strict path resolution on custom `binaryPath` options to prevent directory traversal.
+
+### Section 11: Enclave & Process-Isolation Audit (Round 2)
+Full findings tracked in [GitHub Issue #1](https://github.com/Bharathcoorg/interenv/issues/1).
+
+- **Hardware KEK Binding**: Replaced software-XOR KEK paths with genuine hardware binding — macOS Secure Enclave ECIES via `security-framework` (`Token::SecureEnclave`, `ECIESEncryptionStandardX963SHA256AESGCM`); Linux TPM 2.0 seal/unseal (`create_primary` RSA-2048 restricted decryption → `create` carrying `SensitiveData = master_key` → marshall private+public → `load` + `unseal`); strict Windows NCrypt/DPAPI dispatch on `kek_id` with no silent downgrade. Master key never appears in user memory.
+- **Parent-Death Cleanup**: Linux `pre_exec` now sets `PR_SET_PDEATHSIG(SIGKILL)` before `setsid()`, with a re-parent guard (`getppid != parent_pid -> _exit(1)`), and installs seccomp before `setsid()`.
+- **Argon2id Parameters**: Upgraded to RFC 9106's second recommended set — 64 MiB / t=3 / p=4 — and updated `tests/kdf_params.rs`.
+- **Seccomp Deny-List**: `SeccompRule::new(vec![])` returns `Err(EmptyRule)`, so the previous `if let Ok(rule)` branch was dead. `build_filter()` now maps each syscall to `vec![]` (the correct empty-rule-vector idiom) and is unit-tested (`deny_list_is_non_empty`).
+- **TOCTOU-Free Canonicalization**: Unix walk now opens each component with `O_NOFOLLOW` relative to its true parent fd and resolves the canonical path from the open fd (`/proc/self/fd` on Linux), eliminating the race between per-component checks and the final name-based `canonicalize`.
+- **Shredder Error Reporting**: `fallocate`/`BLKDISCARD` failures are now surfaced with warnings instead of discarded; `BLKDISCARD` is computed via `_IOWR(0x12, 1, sizeof(fstrim_range))` rather than the wrong hard-coded `0x1277`.
+- **Project ID Entropy**: Hashes only the extracted project name + git HEAD + folder name, so secrets in manifest bytes cannot leak into the plaintext project ID.
+- **Passphrase Hygiene**: Read from `INTERENV_PASSPHRASE_FILE`; when sourced from the env var it is immediately `env::remove_var`'d to prevent `/proc/$PID/environ` leakage.
+- **macOS Sandbox Profile**: Now gated on `INTERENV_STRICT_SANDBOX=1` with a permissive default profile.
 
 ### Tests & Tooling
 - Added property-based tests via `proptest`:

@@ -33,13 +33,17 @@ fn test_enclave_kek_roundtrip() {
     assert!(
         wrapped.kek_id == "macos-secure-enclave-v1"
             || wrapped.kek_id == "macos-secure-enclave"
+            || wrapped.kek_id == "macos-keychain-kek-v3"
             || wrapped.kek_id == "macos-keychain-kek-v2",
         "Unexpected macOS kek_id: {}",
         wrapped.kek_id
     );
     #[cfg(target_os = "linux")]
     assert!(
-        wrapped.kek_id == "linux-tpm2-v1" || wrapped.kek_id.starts_with("interenv-kek-v2-linux"),
+        wrapped.kek_id == "linux-tpm2-v2"
+            || wrapped.kek_id == "linux-tpm2-v1"
+            || wrapped.kek_id.starts_with("interenv-kek-v3-linux")
+            || wrapped.kek_id.starts_with("interenv-kek-v2-linux"),
         "Unexpected Linux kek_id: {}",
         wrapped.kek_id
     );
@@ -122,4 +126,32 @@ fn test_enclave_kek_idempotent_store() {
     };
     assert_eq!(*retrieved, master_key);
     let _ = delete_key(project_id);
+}
+
+#[test]
+fn test_kek_salted_derivation_determinism() {
+    use interenv::enclave::keyring_backend::derive_kek_with_salt;
+
+    let salt1 = [1u8; 16];
+    let salt2 = [2u8; 16];
+    let project_id = "test-project-determinism";
+
+    let kek1_a = derive_kek_with_salt(&salt1, project_id);
+    let kek1_b = derive_kek_with_salt(&salt1, project_id);
+    assert_eq!(
+        kek1_a, kek1_b,
+        "KEK derivation with same salt must be deterministic"
+    );
+
+    let kek2 = derive_kek_with_salt(&salt2, project_id);
+    assert_ne!(
+        kek1_a, kek2,
+        "KEK derivation with different salts must produce distinct KEKs"
+    );
+
+    let kek_diff_proj = derive_kek_with_salt(&salt1, "other-project");
+    assert_ne!(
+        kek1_a, kek_diff_proj,
+        "KEK derivation with different projects must produce distinct KEKs"
+    );
 }

@@ -64,16 +64,26 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
     }
 
     #[cfg(target_os = "linux")]
-    // SAFETY: pre_exec runs in forked child before exec; setsid detaches
-    // session and linux_seccomp installs BPF filter without heap allocations.
+    // SAFETY: pre_exec runs in forked child before exec; prctl sets parent-death signal,
+    // linux_seccomp installs BPF filter without heap allocations, and setsid detaches session.
     unsafe {
         use std::os::unix::process::CommandExt;
-        cmd.pre_exec(|| {
-            libc::setsid();
+        let parent_pid = std::process::id() as libc::pid_t;
+        cmd.pre_exec(move || {
+            libc::prctl(
+                libc::PR_SET_PDEATHSIG,
+                libc::SIGKILL as libc::c_ulong,
+                0,
+                0,
+                0,
+            );
+            if libc::getppid() != parent_pid {
+                libc::_exit(1);
+            }
             if let Err(e) = crate::runner::linux_seccomp::install() {
-                std::env::set_var("INTERENV_SECCOMP_FAILED", &e);
                 return Err(std::io::Error::other(e));
             }
+            libc::setsid();
             Ok(())
         });
     }
@@ -86,7 +96,6 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
         cmd.pre_exec(|| {
             libc::setsid();
             if let Err(e) = crate::runner::macos_sandbox::install() {
-                std::env::set_var("INTERENV_SANDBOX_FAILED", &e);
                 return Err(std::io::Error::other(e));
             }
             Ok(())
@@ -198,16 +207,20 @@ fn resolve_executable_path(prog: &str) -> String {
                 || ext.eq_ignore_ascii_case("bat")
         });
         if !has_ext {
-            // Check if <prog>.cmd exists in PATH
+            // Check if executable exists in PATH with standard priority
             if let Ok(path_var) = std::env::var("PATH") {
                 for entry in std::env::split_paths(&path_var) {
-                    let cmd_candidate = entry.join(format!("{prog}.cmd"));
-                    if cmd_candidate.is_file() {
-                        return cmd_candidate.to_string_lossy().to_string();
+                    // Prevent PATH hijacking: only examine absolute paths
+                    if !entry.is_absolute() {
+                        continue;
                     }
                     let exe_candidate = entry.join(format!("{prog}.exe"));
                     if exe_candidate.is_file() {
                         return exe_candidate.to_string_lossy().to_string();
+                    }
+                    let cmd_candidate = entry.join(format!("{prog}.cmd"));
+                    if cmd_candidate.is_file() {
+                        return cmd_candidate.to_string_lossy().to_string();
                     }
                     let bat_candidate = entry.join(format!("{prog}.bat"));
                     if bat_candidate.is_file() {

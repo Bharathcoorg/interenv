@@ -43,10 +43,16 @@ pub fn shred_file<P: AsRef<Path>>(path: P) -> Result<(), String> {
         return Ok(());
     }
 
-    let file_len = match fs::metadata(p) {
-        Ok(m) => m.len() as usize,
+    let meta = match fs::symlink_metadata(p) {
+        Ok(m) => m,
         Err(e) => return Err(format!("Cannot read metadata for {}: {}", p.display(), e)),
     };
+
+    if meta.file_type().is_symlink() {
+        return Err(format!("Refusing to shred symlink: {}", p.display()));
+    }
+
+    let file_len = meta.len() as usize;
 
     if file_len > 0 {
         // Pass 1: All 0x00
@@ -56,6 +62,17 @@ pub fn shred_file<P: AsRef<Path>>(path: P) -> Result<(), String> {
         overwrite_pattern(p, file_len, 0xFF)?;
 
         // Pass 3: CSPRNG Random Bytes
+        #[cfg(unix)]
+        let mut file = {
+            use std::os::unix::fs::OpenOptionsExt;
+            OpenOptions::new()
+                .write(true)
+                .custom_flags(libc::O_NOFOLLOW)
+                .open(p)
+                .map_err(|e| format!("Cannot open file for shredding: {}", e))?
+        };
+
+        #[cfg(not(unix))]
         let mut file = OpenOptions::new()
             .write(true)
             .open(p)
@@ -128,7 +145,12 @@ fn platform_post_shred(path: &Path) -> Result<(), String> {
             while more {
                 let stream_name = String::from_utf16_lossy(&find_data.cStreamName);
                 let trimmed_name = stream_name.trim_matches('\0');
-                if !trimmed_name.is_empty() && trimmed_name != "::$DATA" {
+                if !trimmed_name.is_empty()
+                    && trimmed_name != "::$DATA"
+                    && trimmed_name.chars().all(|c| {
+                        c.is_alphanumeric() || c == ':' || c == '_' || c == '-' || c == '$'
+                    })
+                {
                     let ads_path_str = format!("{}:{}", path.display(), trimmed_name);
                     let _ = std::fs::remove_file(&ads_path_str);
                 }
@@ -148,15 +170,52 @@ fn platform_post_shred(path: &Path) -> Result<(), String> {
         let fd = file.as_raw_fd();
         let len = file.metadata().map(|m| m.len() as i64).unwrap_or(0);
         if len > 0 {
-            // SAFETY: fallocate and ioctl are invoked with valid open file descriptor and length.
+            // SAFETY: fallocate and ioctl are invoked with a valid open file
+            // descriptor and length. Their return values are checked: a
+            // failure means the platform decommit did not happen, so we
+            // surface it rather than silently reporting success.
             unsafe {
-                // FALLOC_FL_ZERO_RANGE (0x10) | FALLOC_FL_KEEP_SIZE (0x01) = 0x11:
-                // Zeroes allocated disk blocks at filesystem level without deallocating/punching holes
-                // (FALLOC_FL_PUNCH_HOLE deallocates blocks without zeroing, leaving data recoverable).
-                let _ = libc::fallocate(fd, 0x10 | 0x01, 0, len);
-                let mut range: [u64; 2] = [0, len as u64];
-                const BLKDISCARD: libc::c_ulong = 0x1277;
-                let _ = libc::ioctl(fd, BLKDISCARD, range.as_mut_ptr());
+                // FALLOC_FL_ZERO_RANGE (0x10) | FALLOC_FL_KEEP_SIZE (0x01) = 0x11.
+                let fa_ret = libc::fallocate(fd, 0x10 | 0x01, 0, len);
+                if fa_ret != 0 {
+                    let err = std::io::Error::last_os_error();
+                    eprintln!(
+                        "⚠️  Filesystem zero-range decommit failed for {}: {} (shredder: partial)",
+                        path.display(),
+                        err
+                    );
+                }
+
+                // Only attempt BLKDISCARD on a block device. The ioctl number is
+                // architecture-dependent, so compute it with _IOWR rather than
+                // hard-coding a magic value that may be wrong on another arch.
+                let mut st = std::mem::MaybeUninit::<libc::stat>::uninit();
+                if libc::fstat(fd, st.as_mut_ptr()) == 0 {
+                    let st = st.assume_init();
+                    if (st.st_mode & libc::S_IFMT) == libc::S_IFBLK {
+                        let mut range: [u64; 2] = [0, len as u64];
+                        // BLKDISCARD is `_IOWR(0x12, 1, struct fstrim_range)` in the
+                        // Linux kernel. The ioctl command byte is 0x12 and the size
+                        // is that of `struct fstrim_range` (two u64s). Computing it
+                        // with _IOWR makes the value correct on every architecture;
+                        // the previously hard-coded `0x1277` was missing the
+                        // direction and size bits and would have been a no-op.
+                        let blkdiscard: libc::c_ulong = libc::_IOWR(
+                            0x12 as libc::c_ulong,
+                            1,
+                            std::mem::size_of::<[u64; 2]>() as libc::c_ulong,
+                        );
+                        let io_ret = libc::ioctl(fd, blkdiscard, range.as_mut_ptr());
+                        if io_ret != 0 {
+                            let err = std::io::Error::last_os_error();
+                            eprintln!(
+                                "⚠️  Block-device BLKDISCARD failed for {}: {} (shredder: partial)",
+                                path.display(),
+                                err
+                            );
+                        }
+                    }
+                }
             }
         }
     }
@@ -182,6 +241,23 @@ fn platform_post_shred(_path: &Path) -> Result<(), String> {
 }
 
 fn overwrite_pattern(path: &Path, file_len: usize, byte_val: u8) -> Result<(), String> {
+    let meta = fs::symlink_metadata(path)
+        .map_err(|e| format!("Cannot read metadata for {}: {}", path.display(), e))?;
+    if meta.file_type().is_symlink() {
+        return Err(format!("Refusing to overwrite symlink: {}", path.display()));
+    }
+
+    #[cfg(unix)]
+    let mut file = {
+        use std::os::unix::fs::OpenOptionsExt;
+        OpenOptions::new()
+            .write(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(path)
+            .map_err(|e| format!("Cannot open file: {}", e))?
+    };
+
+    #[cfg(not(unix))]
     let mut file = OpenOptions::new()
         .write(true)
         .open(path)

@@ -166,6 +166,14 @@ impl InterLock {
         let lock: Self =
             serde_json::from_str(&content).map_err(|e| format!("Invalid lockfile JSON: {}", e))?;
 
+        if lock.cipher != crate::crypto::cipher::CIPHER_XCHACHA20_POLY1305 {
+            return Err(format!(
+                "Unsupported cipher '{}' in lockfile. Supported: {}",
+                lock.cipher,
+                crate::crypto::cipher::CIPHER_XCHACHA20_POLY1305
+            ));
+        }
+
         let parse_version = |v: &str| -> (u32, u32) {
             let mut parts = v.split('.');
             let maj = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);

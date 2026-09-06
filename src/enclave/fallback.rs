@@ -6,12 +6,25 @@ use crate::crypto::kdf::derive_key_from_passphrase;
 
 /// Interactively prompts the user for a passphrase or reads it from the environment if CI is active.
 pub fn prompt_or_get_passphrase(prompt_text: &str) -> Result<Zeroizing<String>, String> {
+    if let Ok(path) = env::var("INTERENV_PASSPHRASE_FILE") {
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            let trimmed = content.trim().to_string();
+            if !trimmed.is_empty() {
+                return Ok(Zeroizing::new(trimmed));
+            }
+        }
+    }
+
     if let Ok(val) = env::var("INTERENV_PASSPHRASE") {
         if !val.trim().is_empty() {
             if env::var("INTERENV_CI").is_ok_and(|v| v == "1") {
                 eprintln!(
                     "⚠️  Using INTERENV_PASSPHRASE from environment (INTERENV_CI is enabled)"
                 );
+                // SAFETY: Immediately scrub from process environment table to prevent /proc/$PID/environ leakage
+                unsafe {
+                    env::remove_var("INTERENV_PASSPHRASE");
+                }
                 return Ok(Zeroizing::new(val));
             } else {
                 eprintln!(

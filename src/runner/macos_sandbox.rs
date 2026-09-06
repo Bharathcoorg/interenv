@@ -1,7 +1,9 @@
 /// Install the Apple Sandbox profile confining process writes and denying network outbound.
 #[cfg(target_os = "macos")]
 pub fn install() -> Result<(), String> {
-    let profile = r#"
+    let strict = std::env::var("INTERENV_STRICT_SANDBOX").unwrap_or_default() == "1";
+    let profile = if strict {
+        r#"
         (version 1)
         (deny default)
         (allow process-exec)
@@ -13,7 +15,23 @@ pub fn install() -> Result<(), String> {
         (allow file-write* (regex #"^/dev/tty$"))
         (allow file-write* (regex #"^/private/tmp/.*"))
         (deny network-outbound (remote ip))
-    "#;
+        "#
+    } else {
+        r#"
+        (version 1)
+        (deny default)
+        (allow process-exec)
+        (allow process-fork)
+        (allow signal (target self))
+        (allow sysctl-read)
+        (allow sysctl-write)
+        (allow file-read*)
+        (allow file-write*)
+        (allow network*)
+        (allow ipc-posix*)
+        (allow mach*)
+        "#
+    };
 
     extern "C" {
         fn sandbox_init(profile: *const u8, flags: u64, error_out: *mut *mut u8) -> i32;

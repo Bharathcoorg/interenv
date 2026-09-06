@@ -232,7 +232,12 @@ fn load_and_decrypt_env(lockfile_path: Option<&Path>) -> Result<(InterLock, Secr
         }
     }
 
-    let secrets = Secrets::from_env_map(&env_map);
+    let mut inner = std::collections::BTreeMap::new();
+    for (k, mut v) in env_map {
+        let zero_v = Zeroizing::new(std::mem::take(&mut v));
+        inner.insert(k, zero_v);
+    }
+    let secrets = Secrets::new(inner);
     Ok((lock, secrets))
 }
 
@@ -265,14 +270,16 @@ fn handle_show(args: ShowArgs) -> Result<(), String> {
         let mut map = std::collections::BTreeMap::new();
         for (k, v) in secrets.iter() {
             if args.reveal {
-                map.insert(k.clone(), (**v).clone());
+                map.insert(k.as_str(), v.as_str());
             } else {
-                map.insert(k.clone(), mask_value(v));
+                map.insert(k.as_str(), "••••••••");
             }
         }
-        let json = serde_json::to_string_pretty(&map)
-            .map_err(|e| format!("JSON formatting error: {}", e))?;
-        println!("{}", json);
+        let json = Zeroizing::new(
+            serde_json::to_string_pretty(&map)
+                .map_err(|e| format!("JSON formatting error: {}", e))?,
+        );
+        println!("{}", json.as_str());
         return Ok(());
     }
 
@@ -282,6 +289,15 @@ fn handle_show(args: ShowArgs) -> Result<(), String> {
         lock.project_name.bold().cyan(),
         secrets.len().to_string().green()
     );
+
+    if args.reveal {
+        eprintln!(
+            "{}",
+            "⚠️  Warning: Secrets are revealed in plaintext to standard output."
+                .yellow()
+                .bold()
+        );
+    }
 
     if args.raw {
         if !args.reveal {
@@ -298,10 +314,12 @@ fn handle_show(args: ShowArgs) -> Result<(), String> {
         println!("{:<30} {:<30}", "KEY".bold(), "VALUE".bold());
         println!("{}", "─".repeat(60));
         for (k, v) in secrets.iter() {
-            let displayed = if args.reveal {
-                (**v).clone()
+            let masked;
+            let displayed: &str = if args.reveal {
+                v.as_str()
             } else {
-                mask_value(v)
+                masked = mask_value(v);
+                &masked
             };
             println!("{:<30} {:<30}", k.cyan(), displayed);
         }

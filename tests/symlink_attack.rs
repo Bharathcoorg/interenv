@@ -39,3 +39,44 @@ fn test_symlink_attack_prevention() {
         }
     }
 }
+
+#[test]
+fn test_shred_file_rejects_symlink() {
+    let temp_dir = TempDir::new().unwrap();
+    let target_file = temp_dir.path().join("shred_target.txt");
+    std::fs::write(&target_file, b"SENSITIVE_SECRET").unwrap();
+
+    let link_path = temp_dir.path().join("symlink_shred");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+        if symlink(&target_file, &link_path).is_ok() {
+            let res = interenv::shredder::shred_file(&link_path);
+            assert!(
+                res.is_err(),
+                "shred_file must reject symlinks to prevent redirection attacks"
+            );
+            assert!(
+                target_file.exists(),
+                "target of symlink must not be overwritten or destroyed"
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::symlink_file;
+        if symlink_file(&target_file, &link_path).is_ok() {
+            let res = interenv::shredder::shred_file(&link_path);
+            assert!(
+                res.is_err(),
+                "shred_file must reject symlinks to prevent redirection attacks"
+            );
+            assert!(
+                target_file.exists(),
+                "target of symlink must not be overwritten or destroyed"
+            );
+        }
+    }
+}

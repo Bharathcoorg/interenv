@@ -5,19 +5,21 @@ use interenv::crypto::kdf::{
 #[test]
 #[allow(clippy::assertions_on_constants)]
 fn test_argon2_owasp_compliance() {
-    // OWASP recommendation for Argon2id is at least 19 MiB (19456 KiB) and at least 2 iterations
+    // RFC 9106 second recommended parameter set for Argon2id:
+    // t=3, p=4, m=2^16 KiB (64 MiB).
     assert!(
-        OWASP_ARGON2_MEM_KIB >= 19 * 1024,
-        "Argon2 memory must be at least 19 MiB (got {} KiB)",
+        OWASP_ARGON2_MEM_KIB >= 64 * 1024,
+        "Argon2 memory must be at least 64 MiB (got {} KiB)",
         OWASP_ARGON2_MEM_KIB
     );
     assert!(
-        OWASP_ARGON2_ITERATIONS >= 2,
-        "Argon2 iterations must be at least 2 (got {})",
+        OWASP_ARGON2_ITERATIONS >= 3,
+        "Argon2 iterations must be at least 3 (got {})",
         OWASP_ARGON2_ITERATIONS
     );
-    assert_eq!(
-        OWASP_ARGON2_PARALLELISM, 1,
-        "Argon2 parallelism must be 1 for single-lane predictability"
+    assert!(
+        OWASP_ARGON2_PARALLELISM >= 4,
+        "Argon2 parallelism must be at least 4 (got {})",
+        OWASP_ARGON2_PARALLELISM
     );
 }

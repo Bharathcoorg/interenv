@@ -3,12 +3,13 @@ use rand::rngs::OsRng;
 use rand::RngCore;
 use zeroize::Zeroizing;
 
-/// OWASP recommended memory cost for Argon2id (19 MiB).
-pub const OWASP_ARGON2_MEM_KIB: u32 = 19 * 1024;
-/// OWASP recommended iteration count for Argon2id.
-pub const OWASP_ARGON2_ITERATIONS: u32 = 2;
-/// OWASP recommended degree of parallelism for Argon2id.
-pub const OWASP_ARGON2_PARALLELISM: u32 = 1;
+/// OWASP-recommended memory cost for Argon2id (64 MiB), matching RFC 9106's
+/// second recommended parameter set (t=3, p=4, m=2^16 KiB).
+pub const OWASP_ARGON2_MEM_KIB: u32 = 64 * 1024;
+/// OWASP-recommended iteration count for Argon2id (RFC 9106).
+pub const OWASP_ARGON2_ITERATIONS: u32 = 3;
+/// OWASP-recommended degree of parallelism for Argon2id (RFC 9106).
+pub const OWASP_ARGON2_PARALLELISM: u32 = 4;
 /// Default derived master key output length in bytes.
 pub const ARGON2_OUTPUT_LEN: usize = 32;
 
@@ -158,10 +159,11 @@ mod tests {
 
     #[test]
     fn test_owasp_params() {
+        // RFC 9106 second recommended parameter set: Argon2id, t=3, p=4, m=2^16 KiB (64 MiB).
         const _: () = {
-            assert!(OWASP_ARGON2_MEM_KIB >= 19 * 1024);
-            assert!(OWASP_ARGON2_ITERATIONS >= 2);
-            assert!(OWASP_ARGON2_PARALLELISM == 1);
+            assert!(OWASP_ARGON2_MEM_KIB >= 64 * 1024);
+            assert!(OWASP_ARGON2_ITERATIONS >= 3);
+            assert!(OWASP_ARGON2_PARALLELISM >= 4);
         };
     }
 }

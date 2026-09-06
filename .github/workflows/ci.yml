@@ -119,6 +119,25 @@ jobs:
       - name: Publish Dry-Run Check
         run: cargo publish --dry-run --locked
 
+  tpm-build:
+    name: TPM Build (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install Linux TPM & DBus Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtss2-dev libdbus-1-dev pkg-config
+      - name: Build with TPM Feature
+        run: cargo build --release --features tpm --locked
+      - name: Test with TPM Feature
+        run: cargo test --release --features tpm --locked
+      - name: Clippy with TPM Feature
+        run: cargo clippy --release --all-targets --features tpm --locked -- -D warnings
+
   fuzz:
     name: Fuzz Testing (Sanity Fuzz)
     runs-on: ubuntu-latest
