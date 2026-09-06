@@ -322,7 +322,14 @@ fn mask_value(val: &str) -> String {
         "••••••••".to_string()
     } else {
         let prefix: String = val.chars().take(3).collect();
-        let suffix: String = val.chars().rev().take(3).collect::<String>().chars().rev().collect();
+        let suffix: String = val
+            .chars()
+            .rev()
+            .take(3)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
         format!("{}••••••••{}", prefix, suffix)
     }
 }

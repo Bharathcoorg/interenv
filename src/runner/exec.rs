@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -18,7 +19,7 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
     cmd.args(args);
 
     // Close stdin when not connected to a TTY to prevent deadlocks
-    if atty::is(atty::Stream::Stdin) {
+    if std::io::stdin().is_terminal() {
         cmd.stdin(Stdio::inherit());
     } else {
         cmd.stdin(Stdio::null());
@@ -61,7 +62,6 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
     for (k, v) in secrets.iter() {
         cmd.env(k, &**v);
     }
-
 
     #[cfg(target_os = "linux")]
     // SAFETY: pre_exec runs in forked child before exec; setsid detaches
@@ -184,9 +184,7 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
     let status = child.wait().map_err(|e| format!("Process error: {}", e))?;
     child_pid.store(0, Ordering::SeqCst);
 
-    let exit_code = status
-        .code()
-        .unwrap_or(i32::from(!status.success()));
+    let exit_code = status.code().unwrap_or(i32::from(!status.success()));
     Ok(exit_code)
 }
 
@@ -194,9 +192,11 @@ fn resolve_executable_path(prog: &str) -> String {
     #[cfg(windows)]
     {
         let path = std::path::Path::new(prog);
-        let has_ext = path
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("exe") || ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"));
+        let has_ext = path.extension().is_some_and(|ext| {
+            ext.eq_ignore_ascii_case("exe")
+                || ext.eq_ignore_ascii_case("cmd")
+                || ext.eq_ignore_ascii_case("bat")
+        });
         if !has_ext {
             // Check if <prog>.cmd exists in PATH
             if let Ok(path_var) = std::env::var("PATH") {

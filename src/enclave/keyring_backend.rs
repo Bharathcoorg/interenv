@@ -311,7 +311,8 @@ fn unwrap_key_dpapi(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String
             )
         };
         if res.is_ok() && !data_out.pbData.is_null() {
-            let slice = unsafe { std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize) };
+            let slice =
+                unsafe { std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize) };
             if slice.len() == 32 {
                 let mut key = [0u8; 32];
                 key.copy_from_slice(slice);
@@ -414,7 +415,9 @@ fn wrap_key_platform(project_id: &str, master_key: &[u8; 32]) -> Result<(String,
 
     if tpm_active {
         eprintln!("⚠️  WARNING: TPM 2.0 unavailable or failed — falling back to software KEK.");
-        eprintln!("⚠️  This provides NO hardware security. Install TPM 2.0 or use --no-tpm to suppress.");
+        eprintln!(
+            "⚠️  This provides NO hardware security. Install TPM 2.0 or use --no-tpm to suppress."
+        );
     } else {
         eprintln!("ℹ️  TPM 2.0 hardware device not detected; using software KEK. Use 'interenv lock --passphrase' for Argon2id protection.");
     }

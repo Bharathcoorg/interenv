@@ -33,7 +33,6 @@ hex = "=0.4.3"
 chrono = { version = "=0.4.39", features = ["serde"] }
 ctrlc = "=3.4.5"
 regex = "=1.11.1"
-atty = "=0.2.14"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58.0", features = [
