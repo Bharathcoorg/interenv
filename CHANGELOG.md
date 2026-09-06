@@ -127,7 +127,7 @@ Full findings tracked in [GitHub Issue #1](https://github.com/Bharathcoorg/inter
 - **Argon2id Parameters**: Upgraded to RFC 9106's second recommended set — 64 MiB / t=3 / p=4 — and updated `tests/kdf_params.rs`.
 - **Seccomp Deny-List**: `SeccompRule::new(vec![])` returns `Err(EmptyRule)`, so the previous `if let Ok(rule)` branch was dead. `build_filter()` now maps each syscall to `vec![]` (the correct empty-rule-vector idiom) and is unit-tested (`deny_list_is_non_empty`).
 - **TOCTOU-Free Canonicalization**: Unix walk now opens each component with `O_NOFOLLOW` relative to its true parent fd and resolves the canonical path from the open fd (`/proc/self/fd` on Linux), eliminating the race between per-component checks and the final name-based `canonicalize`.
-- **Shredder Error Reporting**: `fallocate`/`BLKDISCARD` failures are now surfaced with warnings instead of discarded; `BLKDISCARD` is computed via `_IOWR(0x12, 1, sizeof(fstrim_range))` rather than the wrong hard-coded `0x1277`.
+- **Shredder Error Reporting**: `fallocate`/`BLKDISCARD` failures are now surfaced with warnings instead of discarded; `BLKDISCARD` ioctl (`_IO(0x12, 119) = 0x1277`) is properly invoked on block devices.
 - **Project ID Entropy**: Hashes only the extracted project name + git HEAD + folder name, so secrets in manifest bytes cannot leak into the plaintext project ID.
 - **Passphrase Hygiene**: Read from `INTERENV_PASSPHRASE_FILE`; when sourced from the env var it is immediately `env::remove_var`'d to prevent `/proc/$PID/environ` leakage.
 - **macOS Sandbox Profile**: Now gated on `INTERENV_STRICT_SANDBOX=1` with a permissive default profile.

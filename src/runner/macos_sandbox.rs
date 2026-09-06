@@ -17,7 +17,7 @@ pub fn install() -> Result<(), String> {
         (deny network-outbound (remote ip))
         "#
     } else {
-        r#"
+        r"
         (version 1)
         (deny default)
         (allow process-exec)
@@ -30,7 +30,7 @@ pub fn install() -> Result<(), String> {
         (allow network*)
         (allow ipc-posix*)
         (allow mach*)
-        "#
+        "
     };
 
     extern "C" {

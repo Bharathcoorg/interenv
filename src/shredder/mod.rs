@@ -186,26 +186,15 @@ fn platform_post_shred(path: &Path) -> Result<(), String> {
                     );
                 }
 
-                // Only attempt BLKDISCARD on a block device. The ioctl number is
-                // architecture-dependent, so compute it with _IOWR rather than
-                // hard-coding a magic value that may be wrong on another arch.
+                // Only attempt BLKDISCARD on a block device.
                 let mut st = std::mem::MaybeUninit::<libc::stat>::uninit();
                 if libc::fstat(fd, st.as_mut_ptr()) == 0 {
                     let st = st.assume_init();
                     if (st.st_mode & libc::S_IFMT) == libc::S_IFBLK {
                         let mut range: [u64; 2] = [0, len as u64];
-                        // BLKDISCARD is `_IOWR(0x12, 1, struct fstrim_range)` in the
-                        // Linux kernel. The ioctl command byte is 0x12 and the size
-                        // is that of `struct fstrim_range` (two u64s). Computing it
-                        // with _IOWR makes the value correct on every architecture;
-                        // the previously hard-coded `0x1277` was missing the
-                        // direction and size bits and would have been a no-op.
-                        let blkdiscard: libc::c_ulong = libc::_IOWR(
-                            0x12 as libc::c_ulong,
-                            1,
-                            std::mem::size_of::<[u64; 2]>() as libc::c_ulong,
-                        );
-                        let io_ret = libc::ioctl(fd, blkdiscard, range.as_mut_ptr());
+                        // BLKDISCARD = _IO(0x12, 119) = 0x1277, defined in <linux/fs.h>.
+                        const BLKDISCARD: libc::c_ulong = 0x1277;
+                        let io_ret = libc::ioctl(fd, BLKDISCARD as _, range.as_mut_ptr());
                         if io_ret != 0 {
                             let err = std::io::Error::last_os_error();
                             eprintln!(

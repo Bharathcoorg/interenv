@@ -73,8 +73,6 @@ pub fn wrap_key_secure_enclave(
         token: Some(Token::SecureEnclave),
         location: None,
         access_control: None,
-        #[cfg(feature = "sync-keychain")]
-        synchronizable: None,
     };
 
     let key = SecKey::new(&options).map_err(|e| {

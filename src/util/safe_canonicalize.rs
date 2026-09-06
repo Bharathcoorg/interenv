@@ -72,6 +72,8 @@ pub fn safe_canonicalize(path: &Path) -> Result<PathBuf, String> {
 
     #[cfg(unix)]
     {
+        use std::os::unix::ffi::OsStrExt;
+
         // Open "/" with O_NOFOLLOW so the walk cannot be redirected through a
         // symlink at the very first component.
         #[cfg(target_os = "linux")]
@@ -108,16 +110,17 @@ pub fn safe_canonicalize(path: &Path) -> Result<PathBuf, String> {
                         names.pop();
                     }
                     std::path::Component::Normal(c) => {
-                        let bytes = c.as_os_str().as_encoded_bytes();
-                        if bytes.iter().any(|&b| b == 0) {
+                        let bytes = c.as_bytes();
+                        if bytes.contains(&0) {
                             return Err(format!(
                                 "Invalid path component (embedded NUL): {}",
-                                c.display()
+                                c.to_string_lossy()
                             ));
                         }
                         // SAFETY: bytes contain no NUL; CString::new owns its copy.
-                        let c_cstr = std::ffi::CString::new(bytes)
-                            .map_err(|_| format!("Invalid path component: {}", c.display()))?;
+                        let c_cstr = std::ffi::CString::new(bytes).map_err(|_| {
+                            format!("Invalid path component: {}", c.to_string_lossy())
+                        })?;
                         let parent_fd = *fds.last().unwrap();
                         // SAFETY: parent_fd is a valid directory fd opened with
                         // O_NOFOLLOW; c_cstr is NUL-terminated. O_NOFOLLOW makes
@@ -142,7 +145,7 @@ pub fn safe_canonicalize(path: &Path) -> Result<PathBuf, String> {
                             }
                             return Err(format!(
                                 "Failed to stat '{}': {}",
-                                c.display(),
+                                c.to_string_lossy(),
                                 std::io::Error::last_os_error()
                             ));
                         }
@@ -223,6 +226,6 @@ fn display_joined(names: &[String], c: &std::ffi::OsStr) -> String {
     if !p.ends_with('/') {
         p.push('/');
     }
-    p.push_str(&String::from_utf8_lossy(c.as_encoded_bytes()));
+    p.push_str(&c.to_string_lossy());
     p
 }

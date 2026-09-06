@@ -1,5 +1,5 @@
 #[cfg(target_os = "linux")]
-use seccompiler::{BpfProgram, SeccompAction};
+use seccompiler::{BpfProgram, SeccompAction, SeccompFilter, SeccompRule};
 #[cfg(target_os = "linux")]
 use std::collections::BTreeMap;
 
@@ -81,7 +81,7 @@ pub fn target_arch() -> seccompiler::TargetArch {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
 

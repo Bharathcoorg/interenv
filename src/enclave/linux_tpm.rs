@@ -2,15 +2,19 @@
 
 #[cfg(all(target_os = "linux", feature = "tpm"))]
 use tss_esapi::{
-    constants::tss::TPM2_RH_NULL,
-    interface_types::resource_handles::Hierarchy,
-    structures::{
-        Digest, HashingAlgorithm, KeyedHashScheme, ObjectAttributesBuilder, PublicAlgorithm,
-        PublicBuilder, PublicKeyedHashParameters, RsaExponent, RsaKeyBits, SensitiveData,
-        SymmetricAlgorithm, SymmetricDefinitionObject,
+    attributes::ObjectAttributesBuilder,
+    interface_types::{
+        algorithm::{HashingAlgorithm, PublicAlgorithm},
+        key_bits::RsaKeyBits,
+        resource_handles::Hierarchy,
     },
+    structures::{
+        Digest, KeyedHashScheme, PublicBuilder, PublicKeyedHashParameters, RsaExponent,
+        SensitiveData, SymmetricDefinitionObject,
+    },
+    tcti_ldr::{DeviceConfig, TctiNameConf},
     traits::{Marshall, UnMarshall},
-    Context, TctiNameConf,
+    Context,
 };
 
 #[cfg(all(target_os = "linux", feature = "tpm"))]
@@ -22,15 +26,19 @@ struct TpmSealedBlob {
 
 #[cfg(all(target_os = "linux", feature = "tpm"))]
 fn open_tpm_context() -> Result<Context, String> {
-    let device = if std::path::Path::new("/dev/tpmrm0").exists() {
-        TctiNameConf::Device("/dev/tpmrm0".to_string())
+    let device_path = if std::path::Path::new("/dev/tpmrm0").exists() {
+        "/dev/tpmrm0"
     } else if std::path::Path::new("/dev/tpm0").exists() {
-        TctiNameConf::Device("/dev/tpm0".to_string())
+        "/dev/tpm0"
     } else {
         return Err("No TPM device found (/dev/tpmrm0 or /dev/tpm0)".into());
     };
 
-    Context::new(device).map_err(|e| format!("TPM context creation failed: {:?}", e))
+    let conf = TctiNameConf::Device(DeviceConfig {
+        path: std::path::PathBuf::from(device_path),
+    });
+
+    Context::new(conf).map_err(|e| format!("TPM context creation failed: {:?}", e))
 }
 
 #[cfg(all(target_os = "linux", feature = "tpm"))]
@@ -43,11 +51,7 @@ pub fn wrap_key_tpm2(
 
     // 1. Create primary storage key (RSA 2048)
     let primary_public = tss_esapi::utils::create_restricted_decryption_rsa_public(
-        SymmetricDefinitionObject::new(
-            SymmetricAlgorithm::Aes,
-            128,
-            tss_esapi::structures::HashAlgorithm::Sha256,
-        ),
+        SymmetricDefinitionObject::AES_128_CFB,
         RsaKeyBits::Rsa2048,
         RsaExponent::default(),
     )
@@ -126,11 +130,7 @@ pub fn unwrap_key_tpm2(_project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], St
 
     // 1. Recreate primary storage key
     let primary_public = tss_esapi::utils::create_restricted_decryption_rsa_public(
-        SymmetricDefinitionObject::new(
-            SymmetricAlgorithm::Aes,
-            128,
-            tss_esapi::structures::HashAlgorithm::Sha256,
-        ),
+        SymmetricDefinitionObject::AES_128_CFB,
         RsaKeyBits::Rsa2048,
         RsaExponent::default(),
     )
