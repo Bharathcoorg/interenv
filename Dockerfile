@@ -6,8 +6,9 @@ RUN apt-get update && apt-get install -y libdbus-1-dev pkg-config
 
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+COPY benches ./benches
 
-RUN cargo build --release
+RUN cargo build --release --bin interenv
 
 # Production minimal runtime
 FROM debian:bookworm-slim
