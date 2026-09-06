@@ -469,7 +469,7 @@ fn handle_doctor() -> Result<(), String> {
 }
 
 #[cfg(windows)]
-fn harden_windows_acl(path: &Path) {
+fn harden_windows_acl(path: &Path) -> Result<(), String> {
     if let Ok(user) = env::var("USERNAME") {
         match process::Command::new("icacls")
             .arg(path)
@@ -479,28 +479,28 @@ fn harden_windows_acl(path: &Path) {
         {
             Ok(output) if !output.status.success() => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                eprintln!(
-                    "{} Failed to harden ACL on '{}': {}",
-                    "⚠️ ".yellow(),
+                return Err(format!(
+                    "Failed to harden ACL on '{}': {}",
                     path.display(),
                     stderr.trim()
-                );
+                ));
             }
             Err(e) => {
-                eprintln!(
-                    "{} Failed to execute icacls on '{}': {}",
-                    "⚠️ ".yellow(),
-                    path.display(),
-                    e
-                );
+                return Err(format!(
+                    "Failed to execute icacls on '{}': {e}",
+                    path.display()
+                ));
             }
             _ => {}
         }
     }
+    Ok(())
 }
 
 #[cfg(not(windows))]
-fn harden_windows_acl(_path: &Path) {}
+fn harden_windows_acl(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
 
 fn handle_edit(args: EditArgs) -> Result<(), String> {
     let cwd = env::current_dir().map_err(|e| format!("Cannot get current directory: {}", e))?;
@@ -535,7 +535,7 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
     }
 
     let temp_path = temp_file.path().to_path_buf();
-    harden_windows_acl(&temp_path);
+    harden_windows_acl(&temp_path)?;
 
     temp_file
         .write_all(dotenv_str.as_bytes())

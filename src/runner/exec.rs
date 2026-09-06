@@ -149,8 +149,17 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
                 }
             }
             Err(_) => {
-                if std::env::var("INTERENV_UNSAFE").unwrap_or_default() != "1" {
-                    eprintln!("⚠️ Secret isolation unavailable on this system; child may read its own environment. Set INTERENV_UNSAFE=1 to suppress this warning.");
+                #[cfg(feature = "unsafe_mode")]
+                if std::env::var("INTERENV_UNSAFE").unwrap_or_default() == "1" {
+                    eprintln!("⚠️ WARNING: Secret isolation disabled via unsafe_mode feature — NOT for production use");
+                } else {
+                    eprintln!("❌ Secret isolation unavailable on this system (Windows Job Object creation failed). Aborting execution.");
+                    std::process::exit(75);
+                }
+
+                #[cfg(not(feature = "unsafe_mode"))]
+                {
+                    eprintln!("❌ Secret isolation unavailable on this system (Windows Job Object creation failed). Aborting execution.");
                     std::process::exit(75);
                 }
             }

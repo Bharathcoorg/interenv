@@ -247,11 +247,13 @@ echo getenv('OPENAI_API_KEY');
 
 | Operating System | Enclave Key Storage | Process Sandbox Isolation | Disk Shredding Hook |
 | :--- | :--- | :--- | :--- |
-| **Windows 10 / 11 / Server** | TPM 2.0 (NCrypt) + DPAPI | Windows Job Object (`KILL_ON_CLOSE`) | `SetFileValidData` + ADS Wipe |
+| **Windows 10 / 11 / Server** | TPM 2.0 (NCrypt) + DPAPI | Windows Job Object (`KILL_ON_CLOSE`) | `SetEndOfFile` + `FlushFileBuffers` + ADS Wipe |
 | **macOS (Apple Silicon / Intel)** | Apple Secure Enclave + Keychain | Apple Sandbox Profile (`sandbox_init`)| `F_FULLFSYNC` Cache Flush |
-| **Linux (Ubuntu / Fedora / Arch)** | TPM 2.0 (`tss-esapi`) / Secret Service | Seccomp BPF (`PR_SET_NO_NEW_PRIVS`) | `FALLOC_FL_PUNCH_HOLE` + TRIM |
+| **Linux (Ubuntu / Fedora / Arch)** | TPM 2.0 (`tss-esapi`) / Secret Service | Seccomp BPF (`PR_SET_NO_NEW_PRIVS`) | `FALLOC_FL_ZERO_RANGE` + TRIM |
 
-*Note: For real Linux TPM2 hardware binding, build with `cargo build --release --features tpm`. Without it, falls back to software KEK.*
+> [!NOTE]
+> **Linux TPM 2.0 Hardware Binding**: Real Linux TPM 2.0 hardware binding requires building with `--features tpm` (`cargo build --release --features tpm`).
+> Without this flag or on machines lacking `/dev/tpmrm0`, Linux automatically utilizes secure Freedesktop Secret Service / software KEK protection.
 
 ---
 

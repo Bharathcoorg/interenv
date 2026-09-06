@@ -14,14 +14,19 @@ pub struct WrappedMasterKey {
     pub wrapped: Vec<u8>,
 }
 
-pub(crate) fn derive_kek_mask(project_id: &str) -> [u8; 32] {
+pub(crate) fn derive_kek_with_salt(salt: &[u8], project_id: &str) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update(b"interenv-kek-v2:");
+    hasher.update(b"interenv-kek-v3:");
+    hasher.update(salt);
     hasher.update(project_id.as_bytes());
     let res = hasher.finalize();
     let mut kek = [0u8; 32];
     kek.copy_from_slice(&res);
     kek
+}
+
+pub(crate) fn derive_kek_mask(project_id: &str) -> [u8; 32] {
+    derive_kek_with_salt(b"", project_id)
 }
 
 #[cfg(windows)]
@@ -35,7 +40,6 @@ fn wrap_key_ncrypt(project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
         NCryptCreatePersistedKey, NCryptEncrypt, NCryptFinalizeKey, NCryptFreeObject,
         NCryptOpenKey, NCryptOpenStorageProvider, BCRYPT_AES_ALGORITHM, CERT_KEY_SPEC,
         MS_PLATFORM_CRYPTO_PROVIDER, NCRYPT_FLAGS, NCRYPT_KEY_HANDLE, NCRYPT_PROV_HANDLE,
-        NCRYPT_USE_VIRTUAL_ISOLATION_FLAG,
     };
 
     let mut prov = NCRYPT_PROV_HANDLE::default();
@@ -69,7 +73,7 @@ fn wrap_key_ncrypt(project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
                 BCRYPT_AES_ALGORITHM,
                 windows::core::PCWSTR(key_name_w.as_ptr()),
                 CERT_KEY_SPEC(0),
-                NCRYPT_FLAGS(NCRYPT_USE_VIRTUAL_ISOLATION_FLAG),
+                NCRYPT_FLAGS(0),
             )
         };
         if create_res.is_err() {
@@ -234,12 +238,18 @@ fn unwrap_key_ncrypt(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Strin
 
 #[cfg(windows)]
 fn wrap_key_dpapi(project_id: &str, master_key: &[u8; 32]) -> Result<(String, Vec<u8>), String> {
+    use rand::rngs::OsRng;
+    use rand::RngCore;
     use windows::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
+
+    let mut salt = [0u8; 16];
+    OsRng.fill_bytes(&mut salt);
+
     let data_in = CRYPT_INTEGER_BLOB {
         cbData: master_key.len() as u32,
         pbData: master_key.as_ptr() as *mut u8,
     };
-    let mut entropy_bytes = derive_kek_mask(project_id);
+    let mut entropy_bytes = derive_kek_with_salt(&salt, project_id);
     let entropy_blob = CRYPT_INTEGER_BLOB {
         cbData: entropy_bytes.len() as u32,
         pbData: entropy_bytes.as_mut_ptr(),
@@ -262,17 +272,61 @@ fn wrap_key_dpapi(project_id: &str, master_key: &[u8; 32]) -> Result<(String, Ve
     }
     // SAFETY: data_out.pbData points to data_out.cbData bytes allocated by DPAPI.
     let slice = unsafe { std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize) };
-    let vec = slice.to_vec();
+    let mut out_vec = salt.to_vec();
+    out_vec.extend_from_slice(slice);
     // SAFETY: data_out.pbData was allocated by Win32 DPAPI and is freed with LocalFree.
     unsafe {
         let _ = LocalFree(data_out.pbData as _);
     }
-    Ok(("windows-dpapi-tpm".to_string(), vec))
+    Ok(("windows-dpapi-tpm".to_string(), out_vec))
 }
 
 #[cfg(windows)]
 fn unwrap_key_dpapi(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String> {
     use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
+
+    // Try salted format first (salt[16] + dpapi_ciphertext)
+    if wrapped.len() > 16 {
+        let salt = &wrapped[..16];
+        let ciphertext = &wrapped[16..];
+        let data_in = CRYPT_INTEGER_BLOB {
+            cbData: ciphertext.len() as u32,
+            pbData: ciphertext.as_ptr() as *mut u8,
+        };
+        let mut entropy_bytes = derive_kek_with_salt(salt, project_id);
+        let entropy_blob = CRYPT_INTEGER_BLOB {
+            cbData: entropy_bytes.len() as u32,
+            pbData: entropy_bytes.as_mut_ptr(),
+        };
+        let mut data_out = CRYPT_INTEGER_BLOB::default();
+        let res = unsafe {
+            CryptUnprotectData(
+                &data_in,
+                None,
+                Some(&entropy_blob),
+                None,
+                None,
+                0,
+                &mut data_out,
+            )
+        };
+        if res.is_ok() && !data_out.pbData.is_null() {
+            let slice = unsafe { std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize) };
+            if slice.len() == 32 {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(slice);
+                unsafe {
+                    let _ = LocalFree(data_out.pbData as _);
+                }
+                return Ok(key);
+            }
+            unsafe {
+                let _ = LocalFree(data_out.pbData as _);
+            }
+        }
+    }
+
+    // Fallback for legacy unsalted DPAPI payloads
     let data_in = CRYPT_INTEGER_BLOB {
         cbData: wrapped.len() as u32,
         pbData: wrapped.as_ptr() as *mut u8,
@@ -295,7 +349,7 @@ fn unwrap_key_dpapi(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String
             &mut data_out,
         )
     };
-    if res.is_err() {
+    if res.is_err() || data_out.pbData.is_null() {
         return Err("DPAPI decryption error: could not unwrap key".into());
     }
     // SAFETY: data_out.pbData points to data_out.cbData bytes allocated by DPAPI.
@@ -320,7 +374,10 @@ fn unwrap_key_dpapi(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String
 fn wrap_key_platform(project_id: &str, master_key: &[u8; 32]) -> Result<(String, Vec<u8>), String> {
     match wrap_key_ncrypt(project_id, master_key) {
         Ok(res) => Ok(res),
-        Err(_) => wrap_key_dpapi(project_id, master_key),
+        Err(e) => {
+            eprintln!("⚠️  TPM 2.0 hardware KEK unavailable ({e}); falling back to Windows DPAPI.");
+            wrap_key_dpapi(project_id, master_key)
+        }
     }
 }
 

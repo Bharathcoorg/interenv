@@ -65,6 +65,7 @@ criterion = { version = "=0.5.1", features = ["html_reports"] }
 [features]
 default = []
 tpm = ["dep:tss-esapi"]
+unsafe_mode = []
 
 [profile.release]
 opt-level = 3
