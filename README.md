@@ -5,10 +5,15 @@
 ### *Hardware-Enclave Protected Secrets for Terminal & Git*
 **Eradicate Plaintext `.env` Files from Developer Disks Forever**
 
-[![Crates.io](https://img.shields.io/crates/v/interenv.svg?style=flat-square&color=black)](https://crates.io/crates/interenv)
-[![NPM Version](https://img.shields.io/npm/v/interenv.svg?style=flat-square&color=black)](https://www.npmjs.com/package/interenv)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Built by Interlayer](https://img.shields.io/badge/Interlayer-Ecosystem-purple.svg?style=flat-square)](https://github.com/Bharathcoorg)
+<p align="center">
+  <a href="https://crates.io/crates/interenv"><img src="https://img.shields.io/crates/v/interenv.svg?style=for-the-badge&logo=rust" alt="Crates.io" /></a>
+  <a href="https://www.npmjs.com/package/interenv"><img src="https://img.shields.io/npm/v/interenv.svg?style=for-the-badge&logo=npm" alt="npm" /></a>
+  <a href="https://pypi.org/project/interenv/"><img src="https://img.shields.io/pypi/v/interenv.svg?style=for-the-badge&logo=pypi" alt="PyPI" /></a>
+  <a href="https://packagist.org/packages/bharathcoorg/interenv"><img src="https://img.shields.io/packagist/v/bharathcoorg/interenv.svg?style=for-the-badge&logo=packagist" alt="Packagist" /></a>
+  <a href="https://github.com/Bharathcoorg/interenv/releases/tag/v1.0.0"><img src="https://img.shields.io/github/v/release/Bharathcoorg/interenv?style=for-the-badge&logo=github" alt="GitHub release" /></a>
+  <a href="https://github.com/Bharathcoorg/interenv/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Bharathcoorg/interenv/ci.yml?branch=main&style=for-the-badge&logo=githubactions" alt="CI Status" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License: MIT" /></a>
+</p>
 
 <p align="center">
   <b>Built for macOS TouchID, Windows Hello / TPM 2.0, and Linux Secret Service.</b><br>
@@ -16,6 +21,22 @@
 </p>
 
 </div>
+
+---
+
+## 📦 Official Packages & SDKs
+
+InterEnv core engine, CLI, and multi-language client SDKs are officially published and immediately available across all major package ecosystems:
+
+| Ecosystem | Registry / Source | Install / Add Command | Direct Registry Links |
+| :--- | :--- | :--- | :--- |
+| **Rust** | **crates.io** | `cargo add interenv` • `cargo install interenv` | [![crates.io](https://img.shields.io/crates/v/interenv.svg)](https://crates.io/crates/interenv) • [crates.io/crates/interenv](https://crates.io/crates/interenv) |
+| **Node.js / TypeScript** | **npm** | `npm install interenv` • `npx interenv` | [![npm](https://img.shields.io/npm/v/interenv.svg)](https://www.npmjs.com/package/interenv) • [npmjs.com/package/interenv](https://www.npmjs.com/package/interenv) |
+| **Python / AI Agents** | **PyPI** | `pip install interenv` | [![PyPI](https://img.shields.io/pypi/v/interenv.svg)](https://pypi.org/project/interenv/) • [pypi.org/project/interenv](https://pypi.org/project/interenv/1.0.0/) |
+| **PHP / Laravel / Symfony** | **Packagist** | `composer require bharathcoorg/interenv` | [![Packagist](https://img.shields.io/packagist/v/bharathcoorg/interenv.svg)](https://packagist.org/packages/bharathcoorg/interenv) • [packagist.org/packages/bharathcoorg/interenv](https://packagist.org/packages/bharathcoorg/interenv) |
+| **Go Microservices** | **Go Modules** | `go get github.com/Bharathcoorg/interenv/go/interenv@v1.0.0` | [pkg.go.dev/github.com/Bharathcoorg/interenv/go](https://pkg.go.dev/github.com/Bharathcoorg/interenv/go) |
+| **Standalone Binaries** | **GitHub Releases** | Prebuilt binaries for Linux, macOS (Apple Silicon & Intel), Windows | [GitHub v1.0.0 Release Assets](https://github.com/Bharathcoorg/interenv/releases/tag/v1.0.0) |
+| **Container Image** | **GitHub Packages (GHCR)** | `docker pull ghcr.io/bharathcoorg/interenv:latest` | [GitHub Packages](https://github.com/Bharathcoorg/interenv/pkgs/container/interenv) |
 
 ---
 
