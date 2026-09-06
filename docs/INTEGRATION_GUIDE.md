@@ -115,17 +115,25 @@ return Illuminate\Foundation\Application::configure(basePath: dirname(__DIR__))
 
 ---
 
-## 5. Docker Container Deployments
+## 5. Headless Container & Server Deployments
+
+To use InterEnv inside containerized or headless Linux environments:
 
 ```dockerfile
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
-# Install native binary or copy from builder
-COPY --from=ghcr.io/bharathcoorg/interenv:latest /usr/local/bin/interenv /usr/local/bin/interenv
+# Install native release binary via npm or direct release download
+RUN npm install -g interenv
 
 COPY . .
+
 # Run with in-memory injection via passphrase in CI/CD
 ENV INTERENV_CI=1
 ENTRYPOINT ["interenv", "run", "--", "node", "server.js"]
+```
+
+Supply the decryption passphrase via container runtime environment variables:
+```bash
+docker run -e INTERENV_PASSPHRASE="your-argon2id-passphrase" -e INTERENV_CI=1 my-app
 ```

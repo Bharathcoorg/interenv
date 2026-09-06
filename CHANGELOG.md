@@ -41,9 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Section 7: Performance Benchmarks
 - **Criterion Benchmarks**: Created `benches/crypto.rs` benchmarking 4KiB encryption, 4KiB decryption, and Argon2id KDF derivation.
 
-#### Section 8: Container Images & Release Automation
-- **Dockerfile**: Multi-stage Debian Bookworm container with TPM 2.0 system libraries (`libtss2-dev`) and `tini` entrypoint.
-- **Release Workflow**: Configured `.github/workflows/release.yml` with multi-OS artifact uploads and automated GHCR OCI container publishing on release tags.
+#### Section 8: Multi-Ecosystem Release Automation
+- **Release Automation**: Configured `.github/workflows/release.yml` with cross-compiled release binaries (Linux x86_64, macOS aarch64 & x86_64, Windows x86_64) and automated publishing to Crates.io, npm, PyPI, Packagist, and Go modules.
 
 #### Section 9: Final Code Quality & Audit
 - **Unsafe Code Elimination**: Verified every `unsafe` block across all modules with concise safety invariant comments (max 3 lines).
