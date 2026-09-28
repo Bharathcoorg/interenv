@@ -7,8 +7,8 @@ use std::path::PathBuf;
     name = "interenv",
     author = "Bharath B R <bharathcoorg7@gmail.com>",
     version = "1.0.1",
-    about = "🛡️  Hardware-Enclave Protected Secrets for Terminal & Git (Zero Plaintext .env on Disk) by Interlayer",
-    long_about = "InterEnv eliminates plaintext secrets from developer machines. It encrypts project .env files directly into your OS Hardware Security Enclave (TouchID, TPM 2.0, Windows Hello) and injects decrypted secrets directly into volatile process memory at runtime."
+    about = "🛡️  Hardware-backed or OS-keyring protected secrets for Terminal & Git by Interlayer",
+    long_about = "InterEnv encrypts project environment secrets and protects the encryption key with a hardware-backed provider or operating-system credential store. Passphrase mode is available for portable and headless use."
 )]
 pub struct Cli {
     /// Subcommand to invoke.
@@ -19,10 +19,10 @@ pub struct Cli {
 /// Available subcommands for `InterEnv`.
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// 🔒 Seal an existing .env file into the hardware enclave and securely shred the plaintext
+    /// 🔒 Seal an existing .env file into protected key storage and best-effort remove the plaintext
     Lock(LockArgs),
 
-    /// ⚡ Run a command with decrypted secrets injected into memory (never touches disk)
+    /// ⚡ Run a command with decrypted secrets injected into the child process environment
     Run(RunArgs),
 
     /// ✏️  Edit project secrets securely in your default editor and re-seal automatically
@@ -31,10 +31,10 @@ pub enum Commands {
     /// 👁️  Display project secrets (redacted by default for security)
     Show(ShowArgs),
 
-    /// 📊 Inspect repository security status and hardware enclave binding
+    /// 📊 Inspect repository security status and key-provider binding
     Status,
 
-    /// 🩺 Diagnostic doctor to inspect platform hardware enclave, KDF, cipher, and filesystem `CoW` shred safety
+    /// 🩺 Inspect key-provider, KDF, cipher, and filesystem cleanup characteristics
     Doctor,
 
     /// ℹ️  Display current `InterEnv` version and cryptographic engine specs
@@ -43,7 +43,7 @@ pub enum Commands {
     /// 🛡️  Manage Git pre-commit hooks to prevent accidental plaintext leaks
     Hook(HookArgs),
 
-    /// 💥 Cryptographically shred and erase a sensitive plaintext file from disk
+    /// 💥 Best-effort overwrite and remove a sensitive plaintext file from disk
     Shred(ShredArgs),
 }
 
@@ -58,7 +58,7 @@ pub struct LockArgs {
     #[arg(short, long, default_value = ".interenv.lock")]
     pub output: PathBuf,
 
-    /// Use a password/passphrase instead of hardware enclave (recommended for CI/CD or Docker)
+    /// Use a password/passphrase instead of machine-bound key storage (recommended for CI/CD or Docker)
     #[arg(long)]
     pub passphrase: bool,
 
