@@ -47,7 +47,7 @@ Every software engineer, Web3 validator, and AI agent builder uses environment v
 
 * ❌ **The Catastrophic Problem**: Plaintext `.env` files get accidentally committed to public GitHub repositories daily. Malicious `npm` and `pip` packages scan developers' hard drives to exfiltrate plaintext secrets. In blockchain environments, a leaked `.env` means permanent loss of validator stake or treasury funds.
 * ❌ **The Flaw in Other Tools**: `dotenvx` encrypts secrets but stores the decryption key in another plaintext file (`.env.keys`) on disk! Cloud secret managers (1Password, Doppler, Infisical) are cloud-locked, slow, and require expensive monthly subscriptions.
-* 🛡️ **The InterEnv Solution**: Engineered originally to safeguard high-stakes validator keys and autonomous agent secrets for the **Interlayer Blockchain** ecosystem, InterEnv seals your project secrets inside your **Host Hardware Security Enclave** (Apple Secure Enclave on macOS, TPM 2.0 / Windows Hello on Windows, Secret Service on Linux). Secrets are decrypted **strictly in volatile process memory** for the exact lifecycle of your command, and then erased with cryptographic zeroization (`zeroize`).
+* 🛡️ **The InterEnv Solution**: Engineered originally to safeguard high-stakes validator keys and autonomous agent secrets for the **Interlayer Blockchain** ecosystem, InterEnv seals your project secrets using a **hardware-backed provider where available, or the operating-system credential store as a fallback**. Secrets are decrypted into the child process environment for the command lifecycle; in-memory cleanup uses Rust zeroization where supported, but cannot guarantee removal of every runtime copy.
 
 ---
 
