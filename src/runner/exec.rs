@@ -132,8 +132,15 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
 
         // SAFETY: Win32 CreateJobObjectW accepts null security attributes.
         let job_res = unsafe { CreateJobObjectW(None, None) };
-        let job = unsafe { CreateJobObjectW(None, None) }
-            .map_err(|e| format!("Secret isolation unavailable: failed to create Windows Job Object: {e}"))?;
+        let job = match unsafe { CreateJobObjectW(None, None) } {
+            Ok(job) => job,
+            Err(e) => {
+                let _ = child.kill();
+                return Err(format!(
+                    "Secret isolation unavailable: failed to create Windows Job Object: {e}"
+                ));
+            }
+        };
 
         let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;

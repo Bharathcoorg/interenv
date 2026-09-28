@@ -14,7 +14,7 @@ pub fn install() -> Result<(), String> {
         (allow file-write* (regex #"^/dev/null$"))
         (allow file-write* (regex #"^/dev/tty$"))
         (allow file-write* (regex #"^/private/tmp/.*"))
-        (deny network-outbound (remote ip))
+        (deny network*)
         (deny ipc-posix*)
         (deny mach*)
     "#;
