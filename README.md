@@ -261,10 +261,8 @@ echo getenv('OPENAI_API_KEY');
 > Without this flag or on machines lacking `/dev/tpmrm0`, Linux uses the OS Secret Service credential store when available and never uses a software-derived XOR KEK.
 
 > [!WARNING]
-> **Windows Job Object Isolation & `unsafe_mode` Feature**:
-> Windows builds strictly enforce kernel Job Object isolation with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` to ensure all spawned child trees terminate immediately when `interenv` exits.
-> The optional Cargo feature `unsafe_mode` allows `INTERENV_UNSAFE=1` to bypass Windows Job Object isolation for headless or virtualized CI runners that lack nested Job Object permissions.
-> **Never compile or enable `unsafe_mode` in production environments.**
+> **Windows Job Object Isolation**:
+> Windows builds enforce Job Object isolation with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. Creation, configuration, and child assignment failures are fail-closed; there is no runtime bypass.
 
 ---
 

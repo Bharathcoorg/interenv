@@ -68,7 +68,6 @@ fn test_enclave_kek_roundtrip() {
 
 #[test]
 fn test_enclave_kek_idempotent_store() {
-    std::env::set_var("INTERENV_ALLOW_MACOS_SOFTWARE_FALLBACK", "1");
     let project_id = "test-project-kek-idempotent-888";
     let master_key = [88u8; 32];
 
