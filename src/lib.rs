@@ -30,8 +30,8 @@ pub use envfile::parser::EnvMap;
 pub use envfile::Secrets;
 pub use util::safe_canonicalize;
 
-/// Compute a stable project ID bound to repository anchors (.git/HEAD, manifests)
-/// and folder name, preventing collisions across different folder names (M-9).
+/// Compute a stable project ID from repository identity, project name, and folder name.
+/// The identity is intentionally independent of the currently checked-out Git branch.
 ///
 /// Only *derived* identifiers are hashed — the extracted project name, the git
 /// HEAD reference, and the folder name. Raw manifest bytes are never fed into
@@ -48,11 +48,30 @@ pub fn compute_project_id(cwd: &Path) -> (String, String) {
 
     let mut hasher = Sha256::new();
 
-    // Hash the git HEAD reference (branch/commit pointer) so the ID is bound
-    // to the repository's current state.
-    let git_head = canonical.join(".git").join("HEAD");
-    if let Ok(head_bytes) = std::fs::read(&git_head) {
-        hasher.update(&head_bytes);
+    // Prefer the repository's configured origin as a stable identity anchor.
+    // Do not hash .git/HEAD: changing branches must not orphan the keyring entry.
+    let git_dir = canonical.join(".git");
+    let mut repository_identity = None;
+    if git_dir.is_dir() {
+        if let Ok(config_text) = std::fs::read_to_string(git_dir.join("config")) {
+            let mut in_origin = false;
+            for line in config_text.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with('[') {
+                    in_origin = trimmed == "[remote \"origin\"]";
+                } else if in_origin && trimmed.starts_with("url =") {
+                    repository_identity = Some(trimmed[5..].trim().to_string());
+                    break;
+                }
+            }
+        }
+    }
+    if let Some(identity) = repository_identity {
+        hasher.update(b"git-origin-v1:");
+        hasher.update(identity.as_bytes());
+    } else {
+        hasher.update(b"path-v1:");
+        hasher.update(canonical.to_string_lossy().as_bytes());
     }
 
     // Hash the *extracted* project name, not the raw manifest bytes. The name
