@@ -17,7 +17,7 @@ pub mod envfile;
 pub mod git;
 /// Process execution runner with platform-specific sandboxing.
 pub mod runner;
-/// DoD 5220.22-M 3-pass file shredder with platform decommitment.
+/// Best-effort sensitive-file overwrite and cleanup.
 pub mod shredder;
 /// Shared utilities including symlink-safe canonicalization.
 pub mod util;
