@@ -179,9 +179,11 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
         let _ = unsafe { windows::Win32::Foundation::CloseHandle(process_handle) };
         assigned.map_err(|e| {
             let _ = child.kill();
-            format!("Secret isolation unavailable: failed to assign child to Job Object: {e}")
+            unsafe { let _ = windows::Win32::Foundation::CloseHandle(job); }
+            Err(format!("Secret isolation unavailable: failed to assign child to Job Object: {e}"))
         })?;
-    }
+        job
+    };
 
     let child_pid = Arc::new(AtomicU32::new(child.id()));
     let pid_clone = child_pid.clone();
