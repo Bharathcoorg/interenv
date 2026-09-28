@@ -174,6 +174,10 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
             "🔐 Storage: Operating-system credential store ({})",
             project_id.cyan()
         ),
+        KeyProviderType::WindowsDpapi => println!(
+            "🔐 Storage: Windows DPAPI credential protection ({})",
+            project_id.cyan()
+        ),
         KeyProviderType::Passphrase => println!("🔑 Storage: OWASP Argon2id Passphrase Shield"),
     }
 

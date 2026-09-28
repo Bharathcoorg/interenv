@@ -22,6 +22,8 @@ pub enum KeyProviderType {
     HardwareEnclave,
     /// Stored directly in the platform operating system credential store without hardware claims.
     OsKeyring,
+    /// Protected with Windows DPAPI; this is OS credential protection, not TPM hardware.
+    WindowsDpapi,
     /// Encrypted with an Argon2id derived passphrase (for CI/CD or headless environments)
     Passphrase,
 }

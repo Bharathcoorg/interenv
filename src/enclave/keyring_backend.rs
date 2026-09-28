@@ -228,7 +228,6 @@ fn wrap_key_dpapi(_project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
 
     let mut salt = [0u8; 16];
     OsRng.fill_bytes(&mut salt);
-
     let data_in = CRYPT_INTEGER_BLOB {
         cbData: master_key.len() as u32,
         pbData: master_key.as_ptr() as *mut u8,
@@ -239,7 +238,6 @@ fn wrap_key_dpapi(_project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
         pbData: entropy_bytes.as_mut_ptr(),
     };
     let mut data_out = CRYPT_INTEGER_BLOB::default();
-    // SAFETY: data_in and entropy_blob point to valid contiguous memory buffers.
     let res = unsafe {
         CryptProtectData(
             &data_in,
@@ -251,78 +249,38 @@ fn wrap_key_dpapi(_project_id: &str, master_key: &[u8; 32]) -> Result<(String, V
             &mut data_out,
         )
     };
-    if res.is_err() {
+    if res.is_err() || data_out.pbData.is_null() {
         return Err("DPAPI encryption error: could not wrap key".into());
     }
-    // SAFETY: data_out.pbData points to data_out.cbData bytes allocated by DPAPI.
     let slice = unsafe { std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize) };
     let mut out_vec = salt.to_vec();
     out_vec.extend_from_slice(slice);
-    // SAFETY: data_out.pbData was allocated by Win32 DPAPI and is freed with LocalFree.
     unsafe {
         let _ = LocalFree(data_out.pbData as _);
     }
-    Ok(("windows-dpapi-tpm".to_string(), out_vec))
+    Ok(("windows-dpapi-v3".to_string(), out_vec))
 }
 
 #[cfg(windows)]
 fn unwrap_key_dpapi(_project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String> {
     use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
 
-    // Try salted format first (salt[16] + dpapi_ciphertext)
-    if wrapped.len() > 16 {
-        let salt = &wrapped[..16];
-        let ciphertext = &wrapped[16..];
-        let data_in = CRYPT_INTEGER_BLOB {
-            cbData: ciphertext.len() as u32,
-            pbData: ciphertext.as_ptr() as *mut u8,
-        };
-        let mut entropy_bytes = salt.to_vec();
-        let entropy_blob = CRYPT_INTEGER_BLOB {
-            cbData: entropy_bytes.len() as u32,
-            pbData: entropy_bytes.as_mut_ptr(),
-        };
-        let mut data_out = CRYPT_INTEGER_BLOB::default();
-        let res = unsafe {
-            CryptUnprotectData(
-                &data_in,
-                None,
-                Some(&entropy_blob),
-                None,
-                None,
-                0,
-                &mut data_out,
-            )
-        };
-        if res.is_ok() && !data_out.pbData.is_null() {
-            let slice =
-                unsafe { std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize) };
-            if slice.len() == 32 {
-                let mut key = [0u8; 32];
-                key.copy_from_slice(slice);
-                unsafe {
-                    let _ = LocalFree(data_out.pbData as _);
-                }
-                return Ok(key);
-            }
-            unsafe {
-                let _ = LocalFree(data_out.pbData as _);
-            }
-        }
+    if wrapped.len() <= 16 {
+        return Err("Invalid DPAPI-wrapped key format".into());
     }
 
-    // Fallback for legacy unsalted DPAPI payloads
+    let salt = &wrapped[..16];
+    let ciphertext = &wrapped[16..];
     let data_in = CRYPT_INTEGER_BLOB {
-        cbData: wrapped.len() as u32,
-        pbData: wrapped.as_ptr() as *mut u8,
+        cbData: ciphertext.len() as u32,
+        pbData: ciphertext.as_ptr() as *mut u8,
     };
-    return Err("Refusing legacy unsalted DPAPI key; re-lock the project with a current InterEnv build.".into());
+    let mut entropy_bytes = salt.to_vec();
     let entropy_blob = CRYPT_INTEGER_BLOB {
         cbData: entropy_bytes.len() as u32,
         pbData: entropy_bytes.as_mut_ptr(),
     };
     let mut data_out = CRYPT_INTEGER_BLOB::default();
-    // SAFETY: data_in and entropy_blob point to valid contiguous memory buffers.
     let res = unsafe {
         CryptUnprotectData(
             &data_in,
@@ -337,18 +295,17 @@ fn unwrap_key_dpapi(_project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Strin
     if res.is_err() || data_out.pbData.is_null() {
         return Err("DPAPI decryption error: could not unwrap key".into());
     }
-    // SAFETY: data_out.pbData points to data_out.cbData bytes allocated by DPAPI.
+
     let slice = unsafe { std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize) };
     if slice.len() != 32 {
-        // SAFETY: data_out.pbData is allocated by Win32 DPAPI and freed with LocalFree on error.
         unsafe {
             let _ = LocalFree(data_out.pbData as _);
         }
         return Err("Unwrapped key length mismatch: expected 32 bytes".into());
     }
+
     let mut key = [0u8; 32];
     key.copy_from_slice(slice);
-    // SAFETY: data_out.pbData was allocated by Win32 DPAPI and is freed with LocalFree.
     unsafe {
         let _ = LocalFree(data_out.pbData as _);
     }
@@ -370,7 +327,7 @@ fn wrap_key_platform(project_id: &str, master_key: &[u8; 32]) -> Result<(String,
 fn unwrap_key_platform(kek_id: &str, project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String> {
     match kek_id {
         "windows-ncrypt-tpm-v2" => unwrap_key_ncrypt(project_id, wrapped),
-        "windows-dpapi-tpm" | "windows-dpapi-tpm-v2" => unwrap_key_dpapi(project_id, wrapped),
+        "windows-dpapi-v3" | "windows-dpapi-tpm" | "windows-dpapi-tpm-v2" => unwrap_key_dpapi(project_id, wrapped),
         "" => {
             // Backward-compatibility fallback for pre-v1.0 un-prefixed keys
             if let Ok(key) = unwrap_key_ncrypt(project_id, wrapped) {
@@ -456,6 +413,20 @@ pub fn store_key(project_id: &str, master_key: &[u8; 32]) -> Result<WrappedMaste
     Ok(WrappedMasterKey { kek_id, wrapped })
 }
 
+/// Store the master key directly in the operating system credential store.
+pub fn store_key_os_keyring(project_id: &str, master_key: &[u8; 32]) -> Result<WrappedMasterKey, String> {
+    let entry = Entry::new(SERVICE_NAME, project_id)
+        .map_err(|e| format!("Keyring initialization error: {e}"))?;
+    let value = Zeroizing::new(format!("os-keyring-v1:{}", hex::encode(master_key)));
+    entry
+        .set_password(&value)
+        .map_err(|e| format!("Failed to store master key in OS credential store: {e}"))?;
+    Ok(WrappedMasterKey {
+        kek_id: "os-keyring-v1".to_string(),
+        wrapped: master_key.to_vec(),
+    })
+}
+
 /// Retrieves and unwraps the 256-bit master key from the platform OS / hardware keyring.
 pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
     let entry = Entry::new(SERVICE_NAME, project_id)
@@ -477,6 +448,15 @@ pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
     let wrapped = Zeroizing::new(
         hex::decode(hex_part).map_err(|e| format!("Corrupted keyring key hex: {}", e))?,
     );
+
+    if _kek_id == "os-keyring-v1" {
+        if wrapped.len() != 32 {
+            return Err("OS credential-store key has invalid length; refusing to continue.".into());
+        }
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&wrapped);
+        return Ok(Zeroizing::new(key));
+    }
 
     #[cfg(windows)]
     let raw_key = unwrap_key_platform(_kek_id, project_id, &wrapped)?;

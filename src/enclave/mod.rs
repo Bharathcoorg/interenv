@@ -30,6 +30,8 @@ pub fn store_key(
                     || stored.kek_id.starts_with("macos-secure-enclave")
                 {
                     KeyProviderType::HardwareEnclave
+                } else if stored.kek_id.starts_with("windows-dpapi") {
+                    KeyProviderType::WindowsDpapi
                 } else {
                     KeyProviderType::OsKeyring
                 };
