@@ -33,10 +33,9 @@ pub use util::safe_canonicalize;
 /// Compute a stable project ID from repository identity, project name, and folder name.
 /// The identity is intentionally independent of the currently checked-out Git branch.
 ///
-/// Only *derived* identifiers are hashed — the extracted project name, the git
-/// HEAD reference, and the folder name. Raw manifest bytes are never fed into
-/// the hash, so a secret that happens to appear in the first 1024 bytes of a
-/// `Cargo.toml`/`package.json` cannot leak into the plaintext project ID that is
+/// Only derived identifiers are hashed — the repository identity, extracted
+/// project name, and folder name. Raw manifest bytes are never fed into the
+/// hash, so unrelated manifest content cannot be propagated into the project ID
 /// stored in the lockfile.
 pub fn compute_project_id(cwd: &Path) -> (String, String) {
     let canonical = safe_canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
