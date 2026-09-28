@@ -1,13 +1,6 @@
 //! macOS Secure Enclave hardware Key Encryption Key (KEK) implementation.
 
 #[cfg(target_os = "macos")]
-use crate::enclave::keyring_backend::{derive_kek_mask, derive_kek_with_salt};
-#[cfg(target_os = "macos")]
-use rand::rngs::OsRng;
-#[cfg(target_os = "macos")]
-use rand::RngCore;
-
-#[cfg(target_os = "macos")]
 /// Wrap master encryption key using Apple Secure Enclave hardware key.
 pub fn wrap_key_secure_enclave(
     project_id: &str,
