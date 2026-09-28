@@ -132,47 +132,38 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
 
         // SAFETY: Win32 CreateJobObjectW accepts null security attributes.
         let job_res = unsafe { CreateJobObjectW(None, None) };
-        match job_res {
-            Ok(job) => {
-                let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-                info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-                // SAFETY: SetInformationJobObject is called with valid job handle and matching struct size.
-                let set_res = unsafe {
-                    SetInformationJobObject(
-                        job,
-                        JobObjectExtendedLimitInformation,
-                        &info as *const _ as _,
-                        std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
-                    )
-                };
-                if set_res.is_ok() {
-                    // SAFETY: OpenProcess queries process handle by valid child id.
-                    let process_handle = unsafe {
-                        OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, child.id())
-                    };
-                    if let Ok(p_handle) = process_handle {
-                        // SAFETY: AssignProcessToJobObject assigns process; CloseHandle releases process handle.
-                        let _ = unsafe { AssignProcessToJobObject(job, p_handle) };
-                        let _ = unsafe { windows::Win32::Foundation::CloseHandle(p_handle) };
-                    }
-                }
-            }
-            Err(_) => {
-                #[cfg(feature = "unsafe_mode")]
-                if std::env::var("INTERENV_UNSAFE").unwrap_or_default() == "1" {
-                    eprintln!("⚠️ WARNING: Secret isolation disabled via unsafe_mode feature — NOT for production use");
-                } else {
-                    eprintln!("❌ Secret isolation unavailable on this system (Windows Job Object creation failed). Aborting execution.");
-                    std::process::exit(75);
-                }
+        let job = unsafe { CreateJobObjectW(None, None) }
+            .map_err(|e| format!("Secret isolation unavailable: failed to create Windows Job Object: {e}"))?;
 
-                #[cfg(not(feature = "unsafe_mode"))]
-                {
-                    eprintln!("❌ Secret isolation unavailable on this system (Windows Job Object creation failed). Aborting execution.");
-                    std::process::exit(75);
-                }
-            }
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        unsafe {
+            SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                &info as *const _ as _,
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            )
         }
+        .map_err(|e| {
+            let _ = child.kill();
+            format!("Secret isolation unavailable: failed to configure Windows Job Object: {e}")
+        })?;
+
+        let process_handle = unsafe {
+            OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, child.id())
+        }
+        .map_err(|e| {
+            let _ = child.kill();
+            format!("Secret isolation unavailable: failed to open child process: {e}")
+        })?;
+
+        let assigned = unsafe { AssignProcessToJobObject(job, process_handle) };
+        let _ = unsafe { windows::Win32::Foundation::CloseHandle(process_handle) };
+        assigned.map_err(|e| {
+            let _ = child.kill();
+            format!("Secret isolation unavailable: failed to assign child to Job Object: {e}")
+        })?;
     }
 
     let child_pid = Arc::new(AtomicU32::new(child.id()));

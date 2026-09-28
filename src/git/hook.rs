@@ -2,7 +2,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const INTERENV_HOOK_BACKUP: &str = "pre-commit.interenv-original";
+
 const PRE_COMMIT_SCRIPT: &str = r#"#!/bin/sh
+# If another pre-commit hook existed before InterEnv was installed, preserve its
+# behavior instead of silently replacing it.
+HOOKS_DIR=$(git rev-parse --git-path hooks)
+ORIGINAL_HOOK="$HOOKS_DIR/pre-commit.interenv-original"
+if [ -f "$ORIGINAL_HOOK" ] && [ "$ORIGINAL_HOOK" != "$0" ]; then
+    "$ORIGINAL_HOOK" "$@" || exit $?
+fi
 # InterEnv Pre-Commit Security Guard
 # Prevents accidental commits of plaintext .env files and hardcoded API keys
 
@@ -109,6 +118,21 @@ pub fn install_pre_commit_hook(git_dir: &Path) -> Result<(), String> {
     }
 
     let pre_commit_path = hooks_dir.join("pre-commit");
+    let backup_path = hooks_dir.join(INTERENV_HOOK_BACKUP);
+
+    if pre_commit_path.exists() {
+        let existing = fs::read_to_string(&pre_commit_path).unwrap_or_default();
+        if !existing.contains("InterEnv Pre-Commit Security Guard") {
+            if backup_path.exists() {
+                return Err(format!(
+                    "Existing pre-commit hook found and backup '{}' already exists; refusing to overwrite either hook.",
+                    backup_path.display()
+                ));
+            }
+            fs::rename(&pre_commit_path, &backup_path)
+                .map_err(|e| format!("Failed to preserve existing pre-commit hook: {e}"))?;
+        }
+    }
 
     #[cfg(unix)]
     {
@@ -134,9 +158,24 @@ pub fn install_pre_commit_hook(git_dir: &Path) -> Result<(), String> {
 
 /// Remove the pre-commit security hook from `.git/hooks/pre-commit`.
 pub fn uninstall_pre_commit_hook(git_dir: &Path) -> Result<(), String> {
-    let pre_commit_path = git_dir.join("hooks").join("pre-commit");
+    let hooks_dir = git_dir.join("hooks");
+    let pre_commit_path = hooks_dir.join("pre-commit");
+    let backup_path = hooks_dir.join(INTERENV_HOOK_BACKUP);
+
     if pre_commit_path.exists() {
-        fs::remove_file(&pre_commit_path).map_err(|e| format!("Failed to remove hook: {}", e))?;
+        let current = fs::read_to_string(&pre_commit_path).unwrap_or_default();
+        if current.contains("InterEnv Pre-Commit Security Guard") {
+            fs::remove_file(&pre_commit_path)
+                .map_err(|e| format!("Failed to remove InterEnv hook: {e}"))?;
+        } else {
+            return Err("Refusing to remove a pre-commit hook not installed by InterEnv.".into());
+        }
     }
+
+    if backup_path.exists() {
+        fs::rename(&backup_path, &pre_commit_path)
+            .map_err(|e| format!("Failed to restore original pre-commit hook: {e}"))?;
+    }
+
     Ok(())
 }

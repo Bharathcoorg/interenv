@@ -21,6 +21,18 @@ pub fn build_filter() -> Result<BpfProgram, String> {
         libc::SYS_process_vm_writev,
         libc::SYS_kcmp,
         libc::SYS_unshare,
+        libc::SYS_setns,
+        libc::SYS_mount,
+        libc::SYS_umount2,
+        libc::SYS_pivot_root,
+        libc::SYS_bpf,
+        libc::SYS_perf_event_open,
+        libc::SYS_userfaultfd,
+        libc::SYS_open_by_handle_at,
+        libc::SYS_name_to_handle_at,
+        libc::SYS_init_module,
+        libc::SYS_finit_module,
+        libc::SYS_delete_module,
     ];
 
     for syscall in deny_syscalls {

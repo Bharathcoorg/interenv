@@ -1,7 +1,7 @@
 //! # interenv
 //!
-//! Hardware-Enclave Protected Secrets for Terminal & Git (Zero Plaintext `.env` on Disk).
-//! Built by Interlayer for ultra-secure, local-first secret management.
+//! Hardware-backed or OS-keyring protected secrets for Terminal & Git.
+//! Plaintext source `.env` files are not required to persist after locking.
 
 #![deny(missing_docs)]
 
