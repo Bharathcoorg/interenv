@@ -20,6 +20,22 @@ fn test_project_id_stability_and_collision_resistance() {
     let (id1, name1) = compute_project_id(&original_dir);
     assert_eq!(name1, "my-awesome-tool");
 
+    // A Git repository's identity must remain stable across branch changes.
+    let git_dir = original_dir.join(".git");
+    fs::create_dir_all(&git_dir).unwrap();
+    fs::write(
+        git_dir.join("config"),
+        "[remote \"origin\"]\n\turl = https://github.com/example/my-awesome-tool.git\n",
+    ).unwrap();
+    fs::write(git_dir.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+    let (git_id_main, _) = compute_project_id(&original_dir);
+    fs::write(git_dir.join("HEAD"), "ref: refs/heads/feature/security\n").unwrap();
+    let (git_id_feature, _) = compute_project_id(&original_dir);
+    assert_eq!(
+        git_id_main, git_id_feature,
+        "Changing Git branches must not change the project identity"
+    );
+
     // Same repo and folder produces identical, deterministic project_id
     let (id1_repeat, name1_repeat) = compute_project_id(&original_dir);
     assert_eq!(id1, id1_repeat);
