@@ -59,9 +59,14 @@ pub fn retrieve_key(
             match keyring_backend::retrieve_key(project_id) {
                 Ok(k) => Ok(k),
                 Err(err) => {
+                    let guidance = match provider {
+                        KeyProviderType::HardwareEnclave => "machine-bound hardware key storage",
+                        KeyProviderType::OsKeyring => "local operating-system credential storage",
+                        KeyProviderType::WindowsDpapi => "Windows DPAPI credential protection",
+                        KeyProviderType::Passphrase => "passphrase protection",
+                    };
                     Err(format!(
-                        "Hardware key not found in local OS enclave: {}. This lockfile was sealed with a machine-bound hardware key. To share projects across machines or CI/CD, seal with 'interenv lock --passphrase'.",
-                        err
+                        "Protected key unavailable from {guidance}: {err}. To share projects across machines or CI/CD, seal with 'interenv lock --passphrase'."
                     ))
                 }
             }
