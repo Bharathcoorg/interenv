@@ -68,6 +68,8 @@ fn main() {
 
 use interenv::compute_project_id;
 
+const MAX_ENV_SOURCE_BYTES: u64 = 16 * 1024 * 1024;
+
 fn handle_lock(args: LockArgs) -> Result<(), String> {
     println!(
         "{}",
@@ -96,6 +98,17 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
             println!("Operation cancelled.");
             return Ok(());
         }
+    }
+
+    let source_size = fs::metadata(&args.file)
+        .map_err(|e| format!("Failed to inspect {}: {}", args.file.display(), e))?
+        .len();
+    if source_size > MAX_ENV_SOURCE_BYTES {
+        return Err(format!(
+            "Refusing to load '{}': plaintext input exceeds the {} MiB safety limit.",
+            args.file.display(),
+            MAX_ENV_SOURCE_BYTES / (1024 * 1024)
+        ));
     }
 
     let raw_content = Zeroizing::new(
@@ -657,6 +670,16 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
     }
 
     // Read modified contents
+    let modified_size = fs::metadata(&temp_path)
+        .map_err(|e| format!("Failed to inspect modified temporary file: {}", e))?
+        .len();
+    if modified_size > MAX_ENV_SOURCE_BYTES {
+        return Err(format!(
+            "Refusing to re-seal edited secrets: temporary plaintext exceeds the {} MiB safety limit.",
+            MAX_ENV_SOURCE_BYTES / (1024 * 1024)
+        ));
+    }
+
     let modified_str = Zeroizing::new(
         fs::read_to_string(&temp_path)
             .map_err(|e| format!("Failed to read modified file: {}", e))?,
