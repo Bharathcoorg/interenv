@@ -131,7 +131,7 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
     })?;
 
     #[cfg(windows)]
-    {
+    let job_handle = {
         use windows::Win32::System::JobObjects::{
             AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
             SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
@@ -202,6 +202,11 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
 
     let status = child.wait().map_err(|e| format!("Process error: {}", e))?;
     child_pid.store(0, Ordering::SeqCst);
+
+    #[cfg(windows)]
+    unsafe {
+        let _ = windows::Win32::Foundation::CloseHandle(job_handle);
+    }
 
     #[cfg(windows)]
     unsafe { let _ = windows::Win32::Foundation::CloseHandle(job); }
