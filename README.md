@@ -2,10 +2,10 @@
 
 # 🛡️ InterEnv
 
-### *Hardware-Enclave Protected Secrets for Terminal, AI Agents & Git*
-**Eradicate Plaintext `.env` Files from Developer Disks Forever**
+### *Hardware-backed or OS-keyring protected secrets for Terminal, AI Agents & Git*
+**Encrypt project secrets and avoid persistent plaintext `.env` files**
 
-*Ultra-fast, hardware-enclave secret isolation in pure Rust, built for Interlayer Blockchain and open for all.*
+*Secure project secret storage and runtime isolation in pure Rust, built for Interlayer Blockchain and open for all.*
 
 <p align="center">
   <a href="https://crates.io/crates/interenv"><img src="https://img.shields.io/crates/v/interenv.svg?style=for-the-badge&logo=rust" alt="Crates.io" /></a>
@@ -96,7 +96,7 @@ See [`INSTALL.md`](INSTALL.md) for full installation guides across Cargo, NPM, P
 
 ## 💡 Quickstart in 10 Seconds
 
-### 1. Seal Your `.env` into Hardware Enclave
+### 1. Seal Your `.env` into protected key storage
 Inside any project with an existing `.env` file:
 ```bash
 interenv lock
@@ -239,12 +239,12 @@ echo getenv('OPENAI_API_KEY');
 
 | Feature | `interenv` | `dotenv-vault` | `sops` | `git-crypt` |
 | :--- | :---: | :---: | :---: | :---: |
-| **Hardware Enclave KEK** | 🟢 Native (TPM / SE) | ❌ Cloud Only | 🟡 Optional (KMS/PGP)| ❌ GPG Symmetric |
+| **Hardware-backed / OS credential KEK** | 🟢 Native where supported | ❌ Cloud Only | 🟡 Optional (KMS/PGP)| ❌ GPG Symmetric |
 | **Plaintext on Disk** | 🟢 Encrypted lock payload; no persistent plaintext `.env` required | ❌ Decrypts on disk | ❌ Decrypts to disk | ❌ In-place filter |
 | **Process Sandboxing** | 🟢 Seccomp / Sandbox | ❌ None | ❌ None | ❌ None |
 | **Cloud Dependency** | 🟢 100% Offline | 🔴 Cloud Vault | 🟡 Cloud KMS / PGP | 🟢 100% Offline |
-| **Plaintext Cleanup** | 🟢 Best-effort overwrite + unlink | ❌ None | ❌ None | ❌ None |ne | ❌ None | ❌ None |
-| **Language Runtime** | ⚡ Pure Rust (<1ms) | 🟡 Node.js CLI | 🟡 Go CLI | ⚡ C++ Filter |
+| **Plaintext Cleanup** | 🟢 Best-effort overwrite + unlink | ❌ None | ❌ None | ❌ None |
+| **Language Runtime** | ⚡ Rust CLI | 🟡 Node.js CLI | 🟡 Go CLI | ⚡ C++ Filter |
 
 ---
 
