@@ -8,10 +8,7 @@ fn test_project_id_stability_and_collision_resistance() {
     let original_dir = temp_root.path().join("my-repo-dir-1");
     fs::create_dir_all(&original_dir).unwrap();
 
-    // Create .git/HEAD
-    let git_dir = original_dir.join(".git");
-    fs::create_dir_all(&git_dir).unwrap();
-    fs::write(git_dir.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+    // A non-Git project must still receive a stable, directory-scoped identity.
 
     // Create Cargo.toml
     fs::write(
@@ -32,9 +29,6 @@ fn test_project_id_stability_and_collision_resistance() {
     // MUST NOT have identical project_id (M-9 folder collision prevention)
     let different_dir = temp_root.path().join("different-folder-dir-2");
     fs::create_dir_all(&different_dir).unwrap();
-    let git_dir2 = different_dir.join(".git");
-    fs::create_dir_all(&git_dir2).unwrap();
-    fs::write(git_dir2.join("HEAD"), "ref: refs/heads/main\n").unwrap();
     fs::write(
         different_dir.join("Cargo.toml"),
         "[package]\nname = \"my-awesome-tool\"\nversion = \"1.0.0\"\n",

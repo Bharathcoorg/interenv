@@ -127,6 +127,6 @@ pub enum HookAction {
 /// Arguments for the `shred` command.
 #[derive(Args, Debug)]
 pub struct ShredArgs {
-    /// Path of the file to securely shred with `DoD` 5220.22-M 3-pass overwrite
+    /// Path of the file to best-effort overwrite and remove; physical erasure is not guaranteed
     pub target: PathBuf,
 }

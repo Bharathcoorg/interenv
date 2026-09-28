@@ -95,9 +95,21 @@ def config(binary_path: Optional[str] = None, override: bool = True) -> Dict[str
 
 
 def get(key: str, default: Optional[str] = None, binary_path: Optional[str] = None) -> Optional[str]:
-    """Retrieve a single secret value from the vaulted lockfile without mutating os.environ."""
-    secrets = load_env(binary_path=binary_path, override=False)
-    return secrets.get(key, default)
+    """Retrieve one vaulted secret without populating the caller's environment."""
+    bin_path = os.path.abspath(binary_path) if binary_path else find_binary_path()
+    try:
+        proc = subprocess.run(
+            [bin_path, "show", "--reveal", "--json"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=_build_clean_env(),
+            text=True,
+            check=True,
+        )
+        secrets = json.loads(proc.stdout.strip())
+        return secrets.get(key, default)
+    except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError) as e:
+        raise RuntimeError("Failed to read InterEnv secret") from e
 
 
 def run(command: List[str], binary_path: Optional[str] = None, **kwargs) -> int:

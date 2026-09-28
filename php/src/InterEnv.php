@@ -115,9 +115,45 @@ class InterEnv
     public static function get(string $key, ?string $default = null): ?string
     {
         if (self::$cachedSecrets === null) {
-            self::load();
+            $secrets = self::readSecrets();
+            return $secrets[$key] ?? $default;
         }
         return self::$cachedSecrets[$key] ?? (getenv($key) ?: $default);
+    }
+
+    /**
+     * Read vaulted secrets without populating $_ENV, $_SERVER, or the process environment.
+     */
+    private static function readSecrets(?string $binaryPath = null): array
+    {
+        $bin = $binaryPath ?? self::discoverBinary();
+        $descriptorSpec = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+        $env = [
+            'PATH' => getenv('PATH') ?: '',
+            'HOME' => getenv('HOME') ?: '',
+            'USERPROFILE' => getenv('USERPROFILE') ?: '',
+            'LANG' => getenv('LANG') ?: 'C.UTF-8',
+            'INTERENV_CI' => '1',
+        ];
+        foreach (['DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'XDG_SESSION_ID', 'INTERENV_PASSPHRASE'] as $key) {
+            $val = getenv($key);
+            if ($val !== false && $val !== '') $env[$key] = $val;
+        }
+        $process = proc_open([$bin, 'show', '--reveal', '--json'], $descriptorSpec, $pipes, null, $env);
+        if (!is_resource($process)) throw new RuntimeException("Failed to execute InterEnv binary.");
+        fclose($pipes[0]);
+        $stdout = stream_get_contents($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[1]); fclose($pipes[2]);
+        $exitCode = proc_close($process);
+        if ($exitCode !== 0) throw new RuntimeException("InterEnv failed.");
+        $secrets = json_decode(trim($stdout), true);
+        if (!is_array($secrets)) throw new RuntimeException("InterEnv returned invalid secret JSON.");
+        return $secrets;
     }
 
     /**

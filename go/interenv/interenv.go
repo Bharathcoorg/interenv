@@ -103,11 +103,11 @@ func Load() error {
 
 // Get returns the value of an environment secret, loading the vault if not present.
 func Get(key string) string {
-	if val, ok := os.LookupEnv(key); ok {
-		return val
+	secrets, err := All()
+	if err != nil {
+		return ""
 	}
-	_ = Load()
-	return os.Getenv(key)
+	return secrets[key]
 }
 
 // Run executes an external command with vaulted secrets in memory.
