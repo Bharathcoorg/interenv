@@ -6,8 +6,9 @@ pub fn wrap_key_secure_enclave(
     project_id: &str,
     master_key: &[u8; 32],
 ) -> Result<(String, Vec<u8>), String> {
-    use security_framework::access_control::{AccessControlOptions, ProtectionMode, SecAccessControl};
+    use security_framework::access_control::{ProtectionMode, SecAccessControl};
     use security_framework::key::{Algorithm, GenerateKeyOptions, KeyType, SecKey, Token};
+    use security_framework::passwords::AccessControlOptions;
 
     let key_label = format!("interenv-se-{}", project_id);
 
