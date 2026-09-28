@@ -180,7 +180,7 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
         assigned.map_err(|e| {
             let _ = child.kill();
             unsafe { let _ = windows::Win32::Foundation::CloseHandle(job); }
-            Err(format!("Secret isolation unavailable: failed to assign child to Job Object: {e}"))
+            format!("Secret isolation unavailable: failed to assign child to Job Object: {e}")
         })?;
         job
     };
