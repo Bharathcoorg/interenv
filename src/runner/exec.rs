@@ -208,38 +208,47 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
     Ok(exit_code)
 }
 
-fn resolve_executable_path(prog: &str) -> String {
-    #[cfg(windows)]
+fn resolve_executable_path(prog: &str) -> Result<String, String> {
+    let path = std::path::Path::new(prog);
+    if path.is_absolute()
+        || prog.contains(std::path::MAIN_SEPARATOR)
+        || (cfg!(windows) && (prog.contains('/') || prog.contains('\\')))
     {
-        let path = std::path::Path::new(prog);
-        let has_ext = path.extension().is_some_and(|ext| {
-            ext.eq_ignore_ascii_case("exe")
-                || ext.eq_ignore_ascii_case("cmd")
-                || ext.eq_ignore_ascii_case("bat")
-        });
-        if !has_ext {
-            // Check if executable exists in PATH with standard priority
-            if let Ok(path_var) = std::env::var("PATH") {
-                for entry in std::env::split_paths(&path_var) {
-                    // Prevent PATH hijacking: only examine absolute paths
-                    if !entry.is_absolute() {
-                        continue;
-                    }
-                    let exe_candidate = entry.join(format!("{prog}.exe"));
-                    if exe_candidate.is_file() {
-                        return exe_candidate.to_string_lossy().to_string();
-                    }
-                    let cmd_candidate = entry.join(format!("{prog}.cmd"));
-                    if cmd_candidate.is_file() {
-                        return cmd_candidate.to_string_lossy().to_string();
-                    }
-                    let bat_candidate = entry.join(format!("{prog}.bat"));
-                    if bat_candidate.is_file() {
-                        return bat_candidate.to_string_lossy().to_string();
-                    }
+        return Ok(prog.to_string());
+    }
+
+    let path_var = std::env::var_os("PATH")
+        .ok_or_else(|| format!("Cannot resolve command '{prog}': PATH is unavailable."))?;
+
+    for entry in std::env::split_paths(&path_var).filter(|p| p.is_absolute()) {
+        #[cfg(windows)]
+        {
+            let candidates = if path.extension().is_some() {
+                vec![entry.join(prog)]
+            } else {
+                vec![
+                    entry.join(format!("{prog}.exe")),
+                    entry.join(format!("{prog}.cmd")),
+                    entry.join(format!("{prog}.bat")),
+                ]
+            };
+            for candidate in candidates {
+                if candidate.is_file() {
+                    return Ok(candidate.to_string_lossy().to_string());
                 }
             }
         }
+        #[cfg(not(windows))]
+        {
+            let candidate = entry.join(prog);
+            if candidate.is_file() {
+                return Ok(candidate.to_string_lossy().to_string());
+            }
+        }
     }
-    prog.to_string()
+
+    Err(format!(
+        "Refusing to launch '{prog}': executable was not resolved from an absolute PATH entry. \
+Use an absolute executable path or add the intended absolute directory to PATH."
+    ))
 }
