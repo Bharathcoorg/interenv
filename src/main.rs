@@ -69,6 +69,30 @@ fn main() {
 use interenv::compute_project_id;
 
 const MAX_ENV_SOURCE_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_ENV_KEYS: usize = 4096;
+const MAX_ENV_VALUE_BYTES: usize = 1024 * 1024;
+
+fn validate_env_map(env_map: &std::collections::BTreeMap<String, String>) -> Result<(), String> {
+    if env_map.len() > MAX_ENV_KEYS {
+        return Err(format!(
+            "Environment contains {} keys; maximum supported is {}.",
+            env_map.len(),
+            MAX_ENV_KEYS
+        ));
+    }
+    for (key, value) in env_map {
+        if !interenv::envfile::is_valid_env_key(key) {
+            return Err(format!("Invalid environment variable key in sealed data: '{key}'"));
+        }
+        if value.len() > MAX_ENV_VALUE_BYTES {
+            return Err(format!(
+                "Environment variable '{key}' exceeds the {} MiB per-value safety limit.",
+                MAX_ENV_VALUE_BYTES / (1024 * 1024)
+            ));
+        }
+    }
+    Ok(())
+}
 
 fn handle_lock(args: LockArgs) -> Result<(), String> {
     println!(
@@ -117,6 +141,7 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
     );
 
     let env_map = parse_dotenv(&raw_content);
+    validate_env_map(&env_map)?;
     if env_map.is_empty() {
         if !args.force {
             return Err(format!(
@@ -269,6 +294,7 @@ fn load_and_decrypt_env(lockfile_path: Option<&Path>) -> Result<(InterLock, Secr
     let env_map: std::collections::BTreeMap<String, String> =
         serde_json::from_slice(&decrypted_bytes)
             .map_err(|e| format!("Decrypted data corruption: {}", e))?;
+    validate_env_map(&env_map)?;
 
     // Legacy lockfiles are accepted for migration and immediately rewritten as authenticated v4.
     if lock.version != CURRENT_LOCK_VERSION {
@@ -686,6 +712,7 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
     );
 
     let new_env_map = parse_dotenv(&modified_str);
+    validate_env_map(&new_env_map)?;
 
     // Refuse to write if modified secrets are empty unless --force is provided
     if new_env_map.is_empty() && !args.force {
