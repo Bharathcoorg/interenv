@@ -71,7 +71,7 @@ use interenv::compute_project_id;
 fn handle_lock(args: LockArgs) -> Result<(), String> {
     println!(
         "{}",
-        "🛡️  InterEnv: Sealing Project Secrets into Hardware Enclave..."
+        "🛡️  InterEnv: Sealing Project Secrets into protected key storage..."
             .bold()
             .cyan()
     );
@@ -241,10 +241,16 @@ fn load_and_decrypt_env(lockfile_path: Option<&Path>) -> Result<(InterLock, Secr
 
     let master_key = enclave::retrieve_key(&lock.project_id, lock.key_provider, &salt)?;
 
-    let decrypted_bytes = if lock.version == CURRENT_LOCK_VERSION {
+    let is_v4 = lock.version == CURRENT_LOCK_VERSION;
+    let looks_like_hashed_v4_names = !lock.key_names.is_empty()
+        && lock.key_names.iter().all(|name| name.len() == 64 && name.bytes().all(|b| b.is_ascii_hexdigit()));
+    let decrypted_bytes = if is_v4 {
         let aad = lock.authenticated_metadata()?;
         decrypt_payload_with_aad(&lock.payload, &master_key, &lock.cipher, &aad)?
     } else {
+        if looks_like_hashed_v4_names {
+            return Err("Refusing a lockfile downgrade: authenticated v4 metadata appears to have been relabeled as a legacy schema.".into());
+        }
         decrypt_payload(&lock.payload, &master_key, &lock.cipher)?
     };
     let env_map: std::collections::BTreeMap<String, String> =
@@ -435,7 +441,7 @@ fn handle_status() -> Result<(), String> {
         );
     } else {
         println!(
-            "✨ Plaintext .env: {} (Zero plaintext on disk)",
+            "✨ Plaintext .env: {} (No plaintext .env currently present)",
             "CLEAN".bold().green()
         );
     }
@@ -477,7 +483,7 @@ fn handle_version() -> Result<(), String> {
         OWASP_ARGON2_PARALLELISM
     );
     println!(
-        "Hardware Enclave: Windows Credential Manager / macOS Keychain / Linux Secret Service"
+        "Key storage: hardware-backed provider or operating-system credential store"
     );
     Ok(())
 }
@@ -498,9 +504,9 @@ fn handle_doctor() -> Result<(), String> {
     println!("💻 OS & Architecture: {} ({})", os.green(), arch);
 
     #[cfg(windows)]
-    println!("🔐 Keyring Backend:   Windows Credential Manager / DPAPI");
+    println!("🔐 Keyring Backend:   Windows Platform Crypto Provider / DPAPI fallback");
     #[cfg(target_os = "macos")]
-    println!("🔐 Keyring Backend:   Apple Keychain / Secure Enclave (TouchID)");
+    println!("🔐 Keyring Backend:   Apple Keychain / Secure Enclave (user-presence policy where configured)");
     #[cfg(target_os = "linux")]
     println!("🔐 Keyring Backend:   FreeDesktop Secret Service / DBus");
 
@@ -514,11 +520,11 @@ fn handle_doctor() -> Result<(), String> {
 
     println!("\n📁 Storage & File System Advisory:");
     if cfg!(target_os = "macos") {
-        println!("⚠️  macOS typically uses APFS (Copy-on-Write). While DoD 3-pass overwrite destroys sector data, APFS/SSDs may allocate new flash blocks. Ensure FileVault is enabled.");
+        println!("⚠️  macOS commonly uses APFS/SSDs; overwrite-and-delete cannot guarantee physical erasure. Full-disk encryption reduces residual-data exposure.");
     } else if cfg!(windows) {
-        println!("ℹ️  Windows NTFS in-place overwrite active. Ensure BitLocker full-disk encryption is active on flash SSDs.");
+        println!("ℹ️  Windows storage may use SSDs/CoW mechanisms; overwrite-and-delete cannot guarantee physical erasure. Full-disk encryption reduces residual-data exposure.");
     } else {
-        println!("ℹ️  Linux ext4 in-place overwrite active. On Btrfs/ZFS, ensure subvolume CoW is taken into account or LUKS is active.");
+        println!("ℹ️  Linux filesystems and storage layers may retain copies; overwrite-and-delete cannot guarantee physical erasure. Full-disk encryption reduces residual-data exposure.");
     }
 
     println!(
