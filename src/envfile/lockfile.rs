@@ -120,7 +120,7 @@ pub struct InterLock {
 }
 
 impl InterLock {
-    /// Construct a new `InterLock` instance with latest schema v3.0 defaults.
+    /// Construct a new `InterLock` instance with the latest schema v4.0 defaults.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         project_id: String,
@@ -232,6 +232,7 @@ impl InterLock {
             keys_count: usize,
             key_names: &'a [String],
             created_at: &'a str,
+            updated_at: &'a str,
         }
 
         serde_json::to_vec(&AuthenticatedMetadata {
@@ -246,6 +247,7 @@ impl InterLock {
             keys_count: self.keys_count,
             key_names: &self.key_names,
             created_at: &self.created_at,
+            updated_at: &self.updated_at,
         }).map_err(|e| format!("Failed to serialize authenticated lock metadata: {e}"))
     }
 
