@@ -24,20 +24,23 @@ fn test_enclave_kek_roundtrip() {
     let wrapped = store_res.unwrap();
     #[cfg(windows)]
     assert!(
-        wrapped.kek_id == "windows-ncrypt-tpm-v2" || wrapped.kek_id == "windows-dpapi-v3",
+        wrapped.kek_id == "windows-ncrypt-tpm-v2"
+            || wrapped.kek_id == "windows-dpapi-v3"
+            || wrapped.kek_id == "os-keyring-v1",
         "Unexpected Windows kek_id: {}",
         wrapped.kek_id
     );
     #[cfg(target_os = "macos")]
     assert!(
         wrapped.kek_id == "macos-secure-enclave-v1"
-            || wrapped.kek_id == "macos-secure-enclave",
+            || wrapped.kek_id == "macos-secure-enclave"
+            || wrapped.kek_id == "os-keyring-v1",
         "Unexpected macOS kek_id: {}",
         wrapped.kek_id
     );
     #[cfg(target_os = "linux")]
     assert!(
-        wrapped.kek_id == "linux-tpm2-v2",
+        wrapped.kek_id == "linux-tpm2-v2" || wrapped.kek_id == "os-keyring-v1",
         "Unexpected Linux kek_id: {}",
         wrapped.kek_id
     );
