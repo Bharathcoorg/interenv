@@ -7,6 +7,8 @@ use zeroize::Zeroizing;
 
 /// Identifier for the authenticated XChaCha20-Poly1305 cipher.
 pub const CIPHER_XCHACHA20_POLY1305: &str = "xchacha20-poly1305";
+/// Maximum encrypted plaintext payload accepted from a lockfile.
+pub const MAX_ENCRYPTED_PAYLOAD_BYTES: usize = 16 * 1024 * 1024;
 
 /// Serialized payload container storing nonce and ciphertext.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -78,8 +80,19 @@ pub fn decrypt_payload_with_aad(
         ));
     }
 
+    let max_ciphertext_hex_len = (MAX_ENCRYPTED_PAYLOAD_BYTES + 16) * 2;
+    if payload.ciphertext_hex.len() > max_ciphertext_hex_len {
+        return Err(format!(
+            "Encrypted payload exceeds the {} MiB safety limit",
+            MAX_ENCRYPTED_PAYLOAD_BYTES / (1024 * 1024)
+        ));
+    }
+
     let ciphertext = hex::decode(&payload.ciphertext_hex)
         .map_err(|e| format!("Invalid ciphertext hex: {}", e))?;
+    if ciphertext.len() > MAX_ENCRYPTED_PAYLOAD_BYTES + 16 {
+        return Err("Encrypted payload exceeds the configured safety limit".into());
+    }
 
     let nonce = XNonce::from_slice(&nonce_bytes);
     let decrypted = cipher
