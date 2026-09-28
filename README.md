@@ -240,7 +240,7 @@ echo getenv('OPENAI_API_KEY');
 | Feature | `interenv` | `dotenv-vault` | `sops` | `git-crypt` |
 | :--- | :---: | :---: | :---: | :---: |
 | **Hardware Enclave KEK** | 🟢 Native (TPM / SE) | ❌ Cloud Only | 🟡 Optional (KMS/PGP)| ❌ GPG Symmetric |
-| **Zero Plaintext on Disk**| 🟢 Strict Guarantee | ❌ Decrypts on disk | ❌ Decrypts to disk | ❌ In-place filter |
+| **Plaintext on Disk** | 🟢 Encrypted lock payload; no persistent plaintext `.env` required | ❌ Decrypts on disk | ❌ Decrypts to disk | ❌ In-place filter |
 | **Process Sandboxing** | 🟢 Seccomp / Sandbox | ❌ None | ❌ None | ❌ None |
 | **Cloud Dependency** | 🟢 100% Offline | 🔴 Cloud Vault | 🟡 Cloud KMS / PGP | 🟢 100% Offline |
 | **Plaintext Cleanup** | 🟢 Best-effort overwrite + unlink | ❌ None | ❌ None | ❌ None |ne | ❌ None | ❌ None |
