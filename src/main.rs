@@ -254,6 +254,7 @@ fn load_and_decrypt_env(lockfile_path: Option<&Path>) -> Result<(InterLock, Secr
         );
         lock.cipher = CIPHER_XCHACHA20_POLY1305.to_string();
         lock.version = CURRENT_LOCK_VERSION.to_string();
+        lock.key_names = redact_key_names(env_map.keys());
         lock.updated_at = chrono::Utc::now().to_rfc3339();
         let aad = lock.authenticated_metadata()?;
         lock.payload = encrypt_payload_with_aad(&json_bytes, &master_key, &aad)?;

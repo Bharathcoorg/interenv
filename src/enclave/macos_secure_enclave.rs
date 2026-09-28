@@ -24,7 +24,13 @@ pub fn wrap_key_secure_enclave(
         label: Some(key_label),
         token: Some(Token::SecureEnclave),
         location: None,
-        access_control: None,
+        access_control: Some(
+            SecAccessControl::create_with_protection(
+                Some(ProtectionMode::AccessibleWhenUnlockedThisDeviceOnly),
+                (AccessControlOptions::USER_PRESENCE | AccessControlOptions::PRIVATE_KEY_USAGE).bits(),
+            )
+            .map_err(|e| format!("Failed to configure Secure Enclave access control: {e}"))?,
+        ),
     };
 
     let key = SecKey::new(&options).map_err(|e| {

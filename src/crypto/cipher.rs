@@ -110,12 +110,35 @@ mod tests {
     }
 
     #[test]
-    fn test_aad_tamper_detection() {
+    fn test_aad_authentication() {
+        let key = [42u8; 32];
+        let secret = b"SECRET=supersecret";
+        let encrypted = encrypt_payload_with_aad(secret, &key, b"project=demo").unwrap();
+
+        let decrypted = decrypt_payload_with_aad(
+            &encrypted,
+            &key,
+            CIPHER_XCHACHA20_POLY1305,
+            b"project=demo",
+        )
+        .unwrap();
+        assert_eq!(&*decrypted, secret);
+
+        assert!(decrypt_payload_with_aad(
+            &encrypted,
+            &key,
+            CIPHER_XCHACHA20_POLY1305,
+            b"project=other",
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn test_ciphertext_tamper_detection() {
         let key = [42u8; 32];
         let secret = b"SECRET=supersecret";
         let mut encrypted = encrypt_payload(secret, &key).unwrap();
 
-        // Corrupt ciphertext
         let mut bytes = hex::decode(&encrypted.ciphertext_hex).unwrap();
         bytes[0] ^= 0xFF;
         encrypted.ciphertext_hex = hex::encode(bytes);
