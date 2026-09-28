@@ -176,10 +176,39 @@ impl InterLock {
             .map_err(|e| format!("Failed to flush staged lockfile: {e}"))?;
         drop(file);
 
+        #[cfg(not(windows))]
         fs::rename(&tmp, target).map_err(|e| {
             let _ = fs::remove_file(&tmp);
             format!("Failed to atomically replace lockfile {}: {}", target.display(), e)
         })?;
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::ffi::OsStrExt;
+            use windows::Win32::Storage::FileSystem::{
+                MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+            };
+
+            let from: Vec<u16> = tmp.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+            let to: Vec<u16> = target.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+            let flags = MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH;
+            let ok = unsafe {
+                MoveFileExW(
+                    windows::core::PCWSTR(from.as_ptr()),
+                    windows::core::PCWSTR(to.as_ptr()),
+                    flags,
+                )
+            };
+            if ok.is_err() {
+                let _ = fs::remove_file(&tmp);
+                return Err(format!(
+                    "Failed to atomically replace lockfile {}: {}",
+                    target.display(),
+                    ok.unwrap_err()
+                ));
+            }
+        }
+
         Ok(())
     }
 

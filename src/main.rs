@@ -8,6 +8,7 @@ use std::path::Path;
 use std::process;
 use tempfile::Builder;
 use zeroize::Zeroizing;
+use sha2::{Digest, Sha256};
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -27,6 +28,22 @@ use interenv::envfile::Secrets;
 use interenv::git::hook::{find_git_dir, install_pre_commit_hook, uninstall_pre_commit_hook};
 use interenv::runner::execute_with_env;
 use interenv::shredder::{shred_file, TempFileGuard};
+
+fn redact_key_names<I>(names: I) -> Vec<String>
+where
+    I: IntoIterator,
+    I::Item: AsRef<str>,
+{
+    names
+        .into_iter()
+        .map(|name| {
+            let mut hasher = Sha256::new();
+            hasher.update(b"interenv-key-name-v1:");
+            hasher.update(name.as_ref().as_bytes());
+            hex::encode(hasher.finalize())
+        })
+        .collect()
+}
 
 fn main() {
     let cli = Cli::parse();
@@ -122,7 +139,7 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
         serde_json::to_vec(&env_map).map_err(|e| format!("Serialization error: {}", e))?,
     );
 
-    let key_names: Vec<String> = env_map.keys().cloned().collect();
+    let key_names = redact_key_names(env_map.keys());
 
     let mut lock = InterLock::new(
         project_id.clone(),
@@ -170,7 +187,7 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
     } else {
         println!(
             "{}",
-            "🔥 Securely shredding plaintext file from disk (DoD 5220.22-M)...".yellow()
+            "🔥 Overwriting and removing plaintext file (best-effort cleanup; SSD/CoW recovery cannot be guaranteed)...".yellow()
         );
         shred_file(&args.file)?;
         if args.file.exists() {
@@ -183,7 +200,7 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
             })?;
         }
         println!(
-            "{} Plaintext '{}' destroyed. Zero secrets remain on disk!",
+            "{} Plaintext '{}' removed. Physical recovery from SSD/CoW storage cannot be guaranteed.",
             "✨".green(),
             args.file.display()
         );
@@ -662,7 +679,7 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
     lock.cipher = CIPHER_XCHACHA20_POLY1305.to_string();
     lock.version = CURRENT_LOCK_VERSION.to_string();
     lock.keys_count = new_env_map.len();
-    lock.key_names = new_env_map.keys().cloned().collect();
+    lock.key_names = redact_key_names(new_env_map.keys());
     lock.updated_at = chrono::Utc::now().to_rfc3339();
 
     let aad = lock.authenticated_metadata()?;
@@ -712,13 +729,13 @@ fn handle_shred(args: ShredArgs) -> Result<(), String> {
     }
 
     println!(
-        "🔥 Securely shredding '{}' (DoD 5220.22-M 3-pass overwrite)...",
+        "🔥 Overwriting and removing '{}' (best-effort plaintext cleanup)...",
         args.target.display()
     );
     shred_file(&args.target)?;
     let _ = fs::remove_file(&args.target);
     println!(
-        "{} File destroyed and unlinked from physical storage.",
+        "{} File overwritten and unlinked. Physical recovery from SSD/CoW storage cannot be guaranteed.",
         "✅".green()
     );
     Ok(())

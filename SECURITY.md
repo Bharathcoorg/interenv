@@ -1,46 +1,41 @@
 # Security Policy
 
-## Supported Versions
+## Scope
 
-| Version           | Supported          |
-| ----------------- | ------------------ |
-| 0.1.0 and later   | :white_check_mark: |
-| < 0.1.0           | :x:                |
+InterEnv is a local secrets-management tool. The current unreleased hardening work uses XChaCha20-Poly1305 for lock payloads, Argon2id for passphrase-derived keys, hardware-backed providers where available, and operating-system credential stores as explicitly labeled fallbacks.
 
 ## Reporting a Vulnerability
 
-The **InterEnv** project takes cryptographic and secrets security vulnerabilities seriously.
+Please do not open a public issue for a suspected security vulnerability.
 
-If you discover a security vulnerability or potential weakness in InterEnv's enclave key storage, cryptographic implementation, or memory zeroization, please **do not open a public GitHub issue**. Instead, submit your confidential disclosure directly to the maintainer:
+**Security contact:** `bharathcoorg7@gmail.com`
 
-📧 **Security Contact**: `bharathcoorg7@gmail.com`
+Please include:
+- affected platform and InterEnv build/commit;
+- a minimal reproduction or proof of concept;
+- attacker capabilities and impact;
+- whether the issue affects existing lockfiles or only newly created lockfiles.
 
-### Disclosure Guidelines & SLA
-- **Response SLA**: Vulnerability reports will be acknowledged within **24 hours**.
-- Please include:
-  - A clear description of the vulnerability and affected operating systems (macOS, Windows, Linux).
-  - Steps to reproduce or a minimal proof of concept.
-  - Threat vector and impact assessment.
+We will acknowledge reports as promptly as practical and coordinate disclosure with affected users.
 
-We will coordinate a private patch and release an advisory before public disclosure.
+## Current Security Boundaries
 
-## Threat Model (v1.0)
+- **Lock payload:** XChaCha20-Poly1305 authenticated encryption.
+- **Lock metadata:** schema v4 metadata is authenticated as AEAD associated data. Legacy lockfiles are accepted only to migrate them to v4.
+- **Key providers:** Secure Enclave/TPM providers are used when available; OS credential-store fallbacks are labeled as such. Software-derived XOR KEKs are no longer accepted.
+- **Passphrases:** Argon2id derives a 256-bit key using the lockfile's random salt and current KDF parameters.
+- **Runtime isolation:** Linux seccomp, macOS Sandbox, and Windows Job Objects fail closed when their security boundary cannot be installed.
+- **Lockfile writes:** staged, flushed, permission-restricted, and atomically replaced where the platform supports atomic replacement.
+- **Git hooks:** existing pre-commit hooks are preserved and restored instead of silently overwritten.
 
-InterEnv protects against:
-- Casual disk inspection of plaintext .env files (mitigated: encrypted at rest in OS keyring)
-- Memory dump by other user-level processes (mitigated: process isolation + Job Object on Windows)
-- TPM/SE key extraction (mitigated: key never leaves secure element in clear)
-- Replay of lockfile across machines (mitigated: KEK is bound to local hardware)
-- DoD shred bypass on SSD/CoW (mitigated: fallocate PUNCH_HOLE + ioctl BLKDISCARD + honest doctor advisory)
+## Important Limitations
 
-InterEnv does NOT protect against:
-- Root/kernel-level attacker on the local machine (can read any process memory or keyring)
-- Physical attack on DRAM after power-off (mitigated only via OS-level memory encryption like AMD SME/Intel TME)
-- Compromised build pipeline (mitigated: reproducible builds + signed releases)
-- Memory disclosure via speculative execution (Meltdown/Spectre); consider disabling HT in threat-model environments
+InterEnv cannot guarantee that plaintext never exists anywhere outside its lockfile. A command that receives environment variables can copy, log, transmit, or persist them. Operating systems may also retain copies in process memory, swap, crash dumps, terminal buffers, filesystem snapshots, or copy-on-write storage.
 
-## Reporting Vulnerabilities
-Email security@interlayer.dev (or bharathcoorg7@gmail.com as fallback).
-PGP key: 0xDEADBEEFCAFEBABE1234 (replace with actual key before release).
-Respond within 72 hours; coordinated disclosure preferred.
+The plaintext cleanup command performs best-effort overwrites and unlinking. It does **not** claim guaranteed physical erasure on SSDs, wear-leveling storage, snapshots, journaled filesystems, or copy-on-write filesystems.
 
+A local root/kernel attacker remains outside the protection boundary.
+
+## Release Status
+
+This repository contains unreleased security hardening. No new package or release is implied by these source changes. Release/CI publication hardening is intentionally handled separately and must not be considered a security guarantee of the current published artifacts.

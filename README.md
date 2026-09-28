@@ -18,8 +18,7 @@
 </p>
 
 <p align="center">
-  <b>Built for macOS TouchID, Windows Hello / TPM 2.0, and Linux Secret Service.</b><br>
-  Secrets decrypt <i>only</i> in volatile process memory. Never touches disk. Never leaks in Git.
+  <b>Built for macOS Secure Enclave / Keychain, Windows TPM/DPAPI credential storage, and Linux TPM / Secret Service.</b><br>Secrets are decrypted for the command lifecycle; physical erasure on SSD/CoW storage is not guaranteed.
 </p>
 
 </div>
@@ -56,12 +55,12 @@ Every software engineer, Web3 validator, and AI agent builder uses environment v
 
 | Feature | Plaintext `.env` | `dotenvx` | 1Password / Doppler | **InterEnv (This Tool)** |
 | :--- | :---: | :---: | :---: | :---: |
-| **Storage Security** | 🔴 Zero (Plaintext on disk) | 🟡 Key file on disk (`.env.keys`) | 🟢 Cloud Vault | 🟢 **Hardware Enclave (TPM / TouchID)** |
-| **Disk Plaintext** | 🔴 Exposed | 🟡 Exposes decrypted files | 🟢 None | 🟢 **ZERO Plaintext on Disk** |
+| **Storage Security** | 🔴 Zero (Plaintext on disk) | 🟡 Key file on disk (`.env.keys`) | 🟢 Cloud Vault | 🟢 **Hardware-backed or OS credential store** |
+| **Disk Plaintext** | 🔴 Exposed | 🟡 Exposes decrypted files | 🟢 None | 🟢 **No plaintext lock payload** |
 | **Cloud Dependency** | 🟢 Offline | 🟢 Offline | 🔴 Required (Vendor Lock-in) | 🟢 **100% Offline & Local-First** |
 | **Pricing** | Free | Free | $19–$39/user/month | 🟢 **100% Free & Open Source (MIT)** |
 | **Git Pre-Commit Hook**| ❌ Manual | ❌ Manual | ❌ Complex setup | 🟢 **Built-in 1-Click Guard** |
-| **Secure Shredding** | ❌ None | ❌ None | ❌ None | 🟢 **DoD 5220.22-M Multi-Pass Wipe** |
+| **Secure Shredding** | ❌ None | ❌ None | ❌ None | 🟢 **Best-effort overwrite + unlink** |
 | **Runtime Speed** | Instant | Slow (Node.js) | Slow CLI (Cloud round-trips) | ⚡ **< 1ms (Pure Rust)** |
 
 ---
@@ -89,7 +88,7 @@ cargo build --release --features tpm
 
 > [!NOTE]
 > **Real TPM 2.0 Support**: Linux hardware TPM 2.0 support requires building with `--features tpm`.
-> Without this flag, Linux falls back to software-based KEK protection.
+> Without this flag, Linux uses the OS credential store when available; it does not use a software-derived XOR KEK.
 
 See [`INSTALL.md`](INSTALL.md) for full installation guides across Cargo, NPM, PyPI, Go, PHP, and Docker.
 
@@ -103,9 +102,9 @@ Inside any project with an existing `.env` file:
 interenv lock
 ```
 **What happens:**
-1. Generates an **XChaCha20-Poly1305** master project key and binds it to your **Hardware Enclave (TouchID / TPM / Windows Hello)**.
+1. Generates an **XChaCha20-Poly1305** master project key and seals it with the strongest available hardware-backed or OS credential provider.
 2. Creates an encrypted, git-safe `.interenv.lock` file.
-3. **Cryptographically shreds and destroys** the plaintext `.env` from physical storage using DoD 5220.22-M 3-pass overwriting!
+3. **Best-effort overwrites and removes** the plaintext `.env`; SSDs, snapshots, copy-on-write filesystems, and wear-leveling can retain historical blocks.
 
 ### 2. Run Any App with Secrets in Volatile Memory
 Execute any tool, test runner, validator node, or web server:
@@ -210,17 +209,17 @@ echo getenv('OPENAI_API_KEY');
 | `interenv status` | Inspect repository security status and hardware enclave binding |
 | `interenv doctor` | Audit filesystem CoW behavior, swap configuration, and enclave status |
 | `interenv hook install` | Install Git pre-commit hook to prevent secret leaks |
-| `interenv shred <file>` | Securely erase any file with 3-pass DoD overwrite |
+| `interenv shred <file>` | Best-effort overwrite and remove a sensitive file |
 
 ---
 
 ## 🔒 Security Model & Guarantees
 
 1. **Authenticated Encryption (AEAD)**: All environment payloads are encrypted with **XChaCha20-Poly1305** using 192-bit (24-byte) random nonces sourced from the OS RNG (`rand::rngs::OsRng`).
-2. **Hardware Enclave Sealing**: Master encryption keys are stored directly in the host OS credential enclave:
-   * **macOS**: Apple Keychain backed by Apple Secure Enclave & TouchID (`macos-secure-enclave-v1`).
-   * **Windows**: Windows Credential Manager protected by TPM 2.0 (`windows-ncrypt-tpm-v2`) and DPAPI.
-   * **Linux**: TPM 2.0 hardware primary key binding (`linux-tpm2-v1`) or FreeDesktop Secret Service.
+2. **Key Provider Sealing**: Master encryption keys use the strongest available provider without mislabeling fallbacks:
+   * **macOS**: Apple Secure Enclave when available; otherwise the OS Keychain provider.
+   * **Windows**: Microsoft Platform Crypto Provider/TPM when available; otherwise DPAPI/OS credential storage.
+   * **Linux**: TPM 2.0 when the `tpm` feature is enabled and hardware is available; otherwise the OS Secret Service credential store. No software-derived XOR KEK is used.
 3. **Headless & CI/CD Support**: For automated CI runners and Docker containers, pass `--passphrase` or set `INTERENV_PASSPHRASE` to derive master keys via **Argon2id** (memory-hard password hashing with OWASP defaults: 19 MiB RAM, 2 iterations, parallelism = 1).
 4. **Memory Zeroization**: Plaintext secret buffers implement `zeroize::ZeroizeOnDrop`, ensuring keys and values are actively wiped from RAM upon release.
 
@@ -228,7 +227,7 @@ echo getenv('OPENAI_API_KEY');
 
 | Vector | Guarantee | Implementation |
 | :--- | :--- | :--- |
-| **Disk Inspection** | Zero Plaintext | Master key sealed in OS hardware vault; `.env` shredded immediately. |
+| **Disk Inspection** | No plaintext lock payload | Master key protected by hardware/OS provider; source `.env` is removed after best-effort overwrite. |
 | **Peer Process Sniffing**| Process Sandbox | Linux Seccomp BPF filter; macOS Sandbox profile; Windows Job Object. |
 | **Cross-Host Replay** | Machine Bound | Hardware KEK prevents decrypting lockfile on foreign machines without passphrase. |
 | **Accidental Commits** | Pre-Commit Abort | Automatic hook intercepts `git commit` staging `.env` or plain credentials. |
@@ -244,7 +243,7 @@ echo getenv('OPENAI_API_KEY');
 | **Zero Plaintext on Disk**| 🟢 Strict Guarantee | ❌ Decrypts on disk | ❌ Decrypts to disk | ❌ In-place filter |
 | **Process Sandboxing** | 🟢 Seccomp / Sandbox | ❌ None | ❌ None | ❌ None |
 | **Cloud Dependency** | 🟢 100% Offline | 🔴 Cloud Vault | 🟡 Cloud KMS / PGP | 🟢 100% Offline |
-| **DoD Multi-Pass Shred** | 🟢 3-Pass + Platform | ❌ None | ❌ None | ❌ None |
+| **Plaintext Cleanup** | 🟢 Best-effort overwrite + unlink | ❌ None | ❌ None | ❌ None |ne | ❌ None | ❌ None |
 | **Language Runtime** | ⚡ Pure Rust (<1ms) | 🟡 Node.js CLI | 🟡 Go CLI | ⚡ C++ Filter |
 
 ---
@@ -259,7 +258,7 @@ echo getenv('OPENAI_API_KEY');
 
 > [!NOTE]
 > **Linux TPM 2.0 Hardware Binding**: Real Linux TPM 2.0 hardware binding requires building with `--features tpm` (`cargo build --release --features tpm`).
-> Without this flag or on machines lacking `/dev/tpmrm0`, Linux automatically utilizes secure Freedesktop Secret Service / software KEK protection.
+> Without this flag or on machines lacking `/dev/tpmrm0`, Linux uses the OS Secret Service credential store when available and never uses a software-derived XOR KEK.
 
 > [!WARNING]
 > **Windows Job Object Isolation & `unsafe_mode` Feature**:
@@ -302,13 +301,13 @@ All release binaries are built with `lto = "fat"`, `codegen-units = 1`, `panic =
 **InterEnv** is a high-performance, local-first secret management engine written in Rust that permanently eradicates plaintext `.env` files from developer disks. It binds encrypted project secrets directly to host hardware security enclaves (Apple Secure Enclave on macOS, TPM 2.0 / DPAPI on Windows, and Linux Secret Service) and decrypts them exclusively into volatile process memory.
 
 ### Why was InterEnv engineered for Interlayer Blockchain?
-**Interlayer Blockchain** is a sovereign multi-VM Layer 1 architecture designed for high-throughput consensus, decentralized validators, and autonomous on-chain AI agents. In high-stakes blockchain infrastructure, relying on external cloud secret managers introduces latency bottlenecks and vendor lock-in, while storing validator keys, relayer secrets, or deployer credentials in plaintext `.env` files risks catastrophic financial compromise. **InterEnv** was engineered to provide host silicon-level hardware isolation (Apple Secure Enclave and TPM 2.0) so that validator operators, node engineers, and autonomous Web3 agents can execute commands with zero plaintext exposure on physical disk.
+**Interlayer Blockchain** is a sovereign multi-VM Layer 1 architecture designed for high-throughput consensus, decentralized validators, and autonomous on-chain AI agents. In high-stakes blockchain infrastructure, relying on external cloud secret managers introduces latency bottlenecks and vendor lock-in, while storing validator keys, relayer secrets, or deployer credentials in plaintext `.env` files risks catastrophic financial compromise. **InterEnv** was engineered to provide host silicon-level hardware isolation (Apple Secure Enclave and TPM 2.0) so that validator operators, node engineers, and autonomous Web3 agents can execute commands without requiring a plaintext `.env` file to remain in the project.
 
 ### How is InterEnv different from dotenv, dotenvx, and dotenv-vault?
 - **`dotenv`**: Leaves all API keys, database passwords, and private tokens unencrypted on physical storage, exposing them to rogue npm/pip supply-chain packages and accidental git commits.
 - **`dotenvx`**: Encrypts `.env` files but writes the decryption master key to an unencrypted `.env.keys` file on the exact same disk.
 - **`dotenv-vault` / `Doppler` / `Infisical`**: Require proprietary cloud vaults, persistent internet connections, and paid monthly subscriptions.
-- **`InterEnv`**: 100% offline, local-first, free & open source (MIT), binds keys to host hardware chips (TPM 2.0 / TouchID), and cryptographically destroys plaintext files using 3-pass DoD 5220.22-M overwrites.
+- **`InterEnv`**: 100% offline, local-first, free & open source (MIT), uses hardware-backed providers where available, and performs best-effort plaintext cleanup without claiming guaranteed physical erasure.
 
 ### How do AI Coding Agents (Cursor, Claude Desktop, Windsurf) safely use InterEnv?
 AI coding agents execute your application via `interenv run <command>` or import the language SDK (`interenv.config()` in Node.js, `interenv.load_env()` in Python, `interenv.Load()` in Go, `InterEnv::load()` in PHP). Secrets are injected directly into the child process memory space via standard environment variables without ever creating a plaintext `.env` file on disk. This prevents LLMs, indexing bots, or repository search tools from reading or exfiltrating raw credentials.

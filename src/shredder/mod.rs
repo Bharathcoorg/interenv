@@ -4,7 +4,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-/// RAII Guard that automatically shreds and unlinks a sensitive temporary file on drop.
+/// RAII guard that best-effort overwrites and unlinks a sensitive temporary file on drop.
 #[derive(Debug)]
 pub struct TempFileGuard {
     /// Path to the protected temporary file.
@@ -30,8 +30,10 @@ impl Drop for TempFileGuard {
     }
 }
 
-/// Securely overwrite and delete a sensitive plaintext file from disk.
-/// Performs a 3-pass `DoD` 5220.22-M style overwrite:
+/// Best-effort overwrite and delete of a sensitive plaintext file from disk.
+/// Performs three overwrite passes, then flushes and unlinks the file. This does
+/// not guarantee physical erasure on SSDs, copy-on-write filesystems, snapshots,
+/// journaled filesystems, or storage with wear-leveling.
 /// 1. Overwrite with 0x00
 /// 2. Overwrite with 0xFF
 /// 3. Overwrite with cryptographically secure random bytes
@@ -93,10 +95,12 @@ pub fn shred_file<P: AsRef<Path>>(path: P) -> Result<(), String> {
         file.sync_all().map_err(|e| format!("Sync error: {}", e))?;
     }
 
-    // Truncate to zero bytes
-    let _ = OpenOptions::new().write(true).truncate(true).open(p);
+    // Give platform-specific storage flushing/decommit hooks a chance while the
+    // file still has its original allocation. These are best-effort only.
+    let _ = platform_post_shred(p);
 
-    platform_post_shred(p)?;
+    // Truncate to zero bytes before unlinking.
+    let _ = OpenOptions::new().write(true).truncate(true).open(p);
 
     // Delete file from disk
     fs::remove_file(p)
