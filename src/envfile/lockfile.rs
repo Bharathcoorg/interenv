@@ -18,7 +18,7 @@ pub const CURRENT_LOCK_VERSION: &str = "4.0";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyProviderType {
-    /// Stored in OS Hardware Enclave / Secure Credential Store (`TouchID`, TPM, Windows Credential Manager)
+    /// Stored with a hardware-backed provider such as Secure Enclave, TPM, or the Microsoft Platform Crypto Provider.
     #[default]
     HardwareEnclave,
     /// Stored directly in the platform operating system credential store without hardware claims.
