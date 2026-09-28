@@ -164,6 +164,7 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
         }
         .map_err(|e| {
             let _ = child.kill();
+            unsafe { let _ = windows::Win32::Foundation::CloseHandle(job); }
             format!("Secret isolation unavailable: failed to configure Windows Job Object: {e}")
         })?;
 
@@ -172,6 +173,7 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
         }
         .map_err(|e| {
             let _ = child.kill();
+            unsafe { let _ = windows::Win32::Foundation::CloseHandle(job); }
             format!("Secret isolation unavailable: failed to open child process: {e}")
         })?;
 
@@ -207,9 +209,6 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
     unsafe {
         let _ = windows::Win32::Foundation::CloseHandle(job_handle);
     }
-
-    #[cfg(windows)]
-    unsafe { let _ = windows::Win32::Foundation::CloseHandle(job); }
 
     let exit_code = status.code().unwrap_or(i32::from(!status.success()));
     Ok(exit_code)
