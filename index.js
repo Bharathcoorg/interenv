@@ -7,7 +7,7 @@ const { execFileSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 
-function findBinaryPath() {
+function findBinaryPath(options = {}) {
   const isWin = process.platform === "win32";
   const binaryName = isWin ? "interenv.exe" : "interenv";
   const platformArch = `${process.platform}-${process.arch}`;
@@ -19,22 +19,22 @@ function findBinaryPath() {
   if (fs.existsSync(prebuildPath)) return prebuildPath;
   if (fs.existsSync(releasePath)) return releasePath;
   if (fs.existsSync(debugPath)) return debugPath;
-  return "interenv";
+  if (options.allowSystemPath || process.env.INTERENV_ALLOW_SYSTEM_PATH === "1") return "interenv";
+  throw new Error("Native InterEnv binary not bundled; provide options.binaryPath or set INTERENV_BIN to a trusted absolute path. System PATH fallback requires INTERENV_ALLOW_SYSTEM_PATH=1.");
 }
 
 /**
- * Loads hardware-enclave protected secrets into Node's process.env directly from memory.
- * No plaintext .env file is ever touched or created on disk.
+ * Loads vaulted secrets into Node's process.env for the process lifetime.
  */
 function config(options = {}) {
   try {
-    let bin = options.binaryPath || findBinaryPath();
+    let bin = options.binaryPath || findBinaryPath(options);
 
     // Validate binaryPath security: refuse relative paths that wander outside package
     if (options.binaryPath) {
       const resolved = path.resolve(options.binaryPath);
-      if (!path.isAbsolute(options.binaryPath) && !resolved.startsWith(__dirname)) {
-        throw new Error("Security exception: options.binaryPath must be an absolute path or inside package directory");
+      if (!path.isAbsolute(options.binaryPath)) {
+        throw new Error("Security exception: options.binaryPath must be an absolute path");
       }
       bin = resolved;
     }

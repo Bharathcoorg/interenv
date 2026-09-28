@@ -30,12 +30,12 @@ def find_binary_path() -> str:
         if os.path.exists(candidate):
             return os.path.abspath(candidate)
 
-    # Search PATH
-    which_bin = shutil.which(exe_name)
-    if which_bin:
-        return which_bin
-
-    return exe_name
+    # System PATH is an explicit trust decision because the binary receives secrets.
+    if os.environ.get("INTERENV_ALLOW_SYSTEM_PATH") == "1":
+        which_bin = shutil.which(exe_name)
+        if which_bin:
+            return which_bin
+    raise RuntimeError("InterEnv native binary not found; provide a trusted binary_path or set INTERENV_ALLOW_SYSTEM_PATH=1.")
 
 
 def _build_clean_env() -> Dict[str, str]:
@@ -57,7 +57,7 @@ def _build_clean_env() -> Dict[str, str]:
 def load_env(binary_path: Optional[str] = None, override: bool = True) -> Dict[str, str]:
     """
     Load hardware-enclave protected secrets into os.environ directly from memory.
-    Zero plaintext .env file is ever touched or created on disk.
+    The native CLI decrypts secrets only for the requested process lifecycle.
     """
     bin_path = binary_path or find_binary_path()
     cmd = [bin_path, "show", "--reveal", "--json"]
@@ -80,7 +80,7 @@ def load_env(binary_path: Optional[str] = None, override: bool = True) -> Dict[s
     try:
         secrets = json.loads(proc.stdout.strip())
     except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse InterEnv secrets JSON: {proc.stdout}") from e
+        raise ValueError("InterEnv returned invalid secret JSON") from e
 
     for k, v in secrets.items():
         if override or k not in os.environ:

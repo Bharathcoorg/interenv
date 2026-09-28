@@ -1,5 +1,4 @@
-// Package interenv provides in-memory hardware-enclave protected secrets for Go applications.
-// Zero plaintext .env files are ever created or read from physical disk.
+// Package interenv provides vaulted secret access for Go applications.
 package interenv
 
 import (
@@ -39,7 +38,10 @@ func discoverBinary() string {
 		}
 	}
 
-	return exeName
+	if os.Getenv("INTERENV_ALLOW_SYSTEM_PATH") == "1" {
+		return exeName
+	}
+	return ""
 }
 
 // buildCleanEnv constructs a clean execution environment for the native CLI.
@@ -63,6 +65,7 @@ func buildCleanEnv() []string {
 // All retrieves all secrets from the local project lockfile as a key-value map.
 func All() (map[string]string, error) {
 	bin := discoverBinary()
+	if bin == "" { return nil, fmt.Errorf("InterEnv native binary not found; set INTERENV_BIN or explicitly set INTERENV_ALLOW_SYSTEM_PATH=1 for a trusted PATH") }
 	cmd := exec.Command(bin, "show", "--reveal", "--json")
 	cmd.Env = buildCleanEnv()
 
@@ -110,6 +113,7 @@ func Get(key string) string {
 // Run executes an external command with vaulted secrets in memory.
 func Run(name string, args ...string) error {
 	bin := discoverBinary()
+	if bin == "" { return fmt.Errorf("InterEnv native binary not found; set INTERENV_BIN or explicitly set INTERENV_ALLOW_SYSTEM_PATH=1 for a trusted PATH") }
 	fullArgs := append([]string{"run", name}, args...)
 	cmd := exec.Command(bin, fullArgs...)
 	cmd.Stdin = os.Stdin

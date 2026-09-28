@@ -1,6 +1,6 @@
 """
 InterEnv Python SDK v1.0.1
-Hardware-Enclave Protected Secrets for Python & AI Agents (Zero Plaintext .env on Disk)
+Vaulted secrets for Python and AI agents
 Built by Interlayer
 """
 

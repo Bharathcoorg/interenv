@@ -1,7 +1,7 @@
 {
   "name": "interenv",
   "version": "1.0.1",
-  "description": "Hardware-Enclave Protected Secrets for Terminal, AI Agents & Git (Zero Plaintext .env on Disk) by Interlayer - Modern Dotenv Alternative with TPM 2.0 & Secure Enclave",
+  "description": "Hardware-backed and OS-keyring protected project secrets for terminal, AI agents, and Git",
   "main": "index.js",
   "types": "index.d.ts",
   "bin": {
@@ -30,7 +30,6 @@
     "doppler-alternative",
     "secrets",
     "secret-manager",
-    "zero-plaintext",
     "security",
     "hardware-enclave",
     "secure-enclave",
@@ -45,7 +44,6 @@
     "api-keys",
     "argon2id",
     "xchacha20poly1305",
-    "dod-shredder",
     "git-leak-prevention",
     "pre-commit",
     "zero-trust",

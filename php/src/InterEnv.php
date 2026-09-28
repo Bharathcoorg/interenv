@@ -41,12 +41,15 @@ class InterEnv
             }
         }
 
-        return $exeName;
+        if (getenv("INTERENV_ALLOW_SYSTEM_PATH") === "1") {
+            return $exeName;
+        }
+        throw new RuntimeException("InterEnv native binary not found; set INTERENV_BIN or explicitly set INTERENV_ALLOW_SYSTEM_PATH=1 for a trusted PATH.");
     }
 
     /**
      * Load hardware-enclave secrets into $_ENV, $_SERVER, and putenv().
-     * Zero plaintext .env files are created or read from physical disk.
+     * Secrets are decrypted only for the requested process lifecycle.
      */
     public static function load(?string $binaryPath = null, bool $override = true): array
     {
@@ -90,7 +93,7 @@ class InterEnv
 
         $secrets = json_decode(trim($stdout), true);
         if (!is_array($secrets)) {
-            throw new RuntimeException("Invalid JSON received from InterEnv: {$stdout}");
+            throw new RuntimeException("InterEnv returned invalid secret JSON.");
         }
 
         self::$cachedSecrets = $secrets;

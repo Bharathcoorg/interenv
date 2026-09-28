@@ -31,8 +31,10 @@ function findBinary() {
     return { cmd: debugPath, args: process.argv.slice(2) };
   }
 
-  // 4. Try global PATH
-  return { cmd: "interenv", args: process.argv.slice(2) };
+  // System PATH is opt-in because the binary receives credentials.
+  if (process.env.INTERENV_ALLOW_SYSTEM_PATH === "1") return { cmd: "interenv", args: process.argv.slice(2) };
+  console.error("Native InterEnv binary is not bundled. Set INTERENV_ALLOW_SYSTEM_PATH=1 only when you explicitly trust the system PATH.");
+  process.exit(1);
 }
 
 const { cmd, args } = findBinary();

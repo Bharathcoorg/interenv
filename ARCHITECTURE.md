@@ -23,7 +23,7 @@ This document describes the architectural layout, internal modules, and security
         v                                                   v
 +-----------------------------+             +-------------------------------+
 |     In-Memory Secrets       |             |         Storage Layer         |
-|  - Zeroizing Wrapped Map    |             |  - `.interenv.lock` (JSON v3) |
+|  - Zeroizing Wrapped Map    |             |  - `.interenv.lock` (JSON v4) |
 |  - String Buffer Scrubbing  |             |  - Safe Atomic Canonicalizer  |
 +-----------------------------+             +-------------------------------+
         |                                                   |
@@ -41,10 +41,10 @@ This document describes the architectural layout, internal modules, and security
                                   v
 +-----------------------------------------------------------------------+
 |                    Shredder & Hygiene Layer                           |
-|  - 3-Pass DoD 5220.22-M Overwrite Pattern                             |
-|  - Linux `FALLOC_FL_PUNCH_HOLE` + `BLKDISCARD` ioctl                  |
-|  - Windows `SetFileValidData` Page Decommit + ADS Stream Wipe         |
-|  - macOS `F_FULLFSYNC` Controller Flush                               |
+|  - Best-effort multi-pass overwrite, flush, and unlink; physical erasure is not guaranteed on SSD/CoW/snapshot storage                             |
+|  - Linux platform-specific cleanup where supported                  |
+|  - Windows platform-specific cleanup where supported         |
+|  - macOS platform-specific flushing where supported                               |
 +-----------------------------------------------------------------------+
 ```
 
@@ -54,15 +54,15 @@ This document describes the architectural layout, internal modules, and security
 
 ### 2.1 Cryptographic Layer (`src/crypto/`)
 - **AEAD Cipher (`cipher.rs`)**: Exclusively utilizes **XChaCha20-Poly1305** (`chacha20poly1305 = "=0.10.1"`). Every encryption generates a unique 192-bit (24-byte) cryptographic nonce from `rand::rngs::OsRng`. Plaintext decryption verifies the 128-bit Poly1305 authentication tag prior to exposing secrets.
-- **Key Derivation Function (`kdf.rs`)**: Adheres to OWASP password storage recommendations with **Argon2id** (memory cost = 19 MiB, iterations = 2, parallelism = 1). Validates that physical system memory exceeds 64 MiB before initiating derivation to protect against denial-of-service in constrained environments.
+- **Key Derivation Function (`kdf.rs`)**: Adheres to OWASP password storage recommendations with **Argon2id** (the parameters recorded in each lockfile; current defaults are defined in `src/crypto/kdf.rs`). Validates that physical system memory exceeds 64 MiB before initiating derivation to protect against denial-of-service in constrained environments.
 
 ### 2.2 Enclave & Key Encryption Key Layer (`src/enclave/`)
-- **Windows**: Primary encryption via TPM 2.0 through Cryptography Next Generation (`NCryptOpenStorageProvider`, `MS_PLATFORM_CRYPTO_PROVIDER`, `BCRYPT_AES_ALGORITHM`). Transparent fallback to user-level DPAPI (`CryptProtectData`) with custom entropy derived from project identifiers.
-- **macOS**: Secure Enclave hardware binding with user presence ACL (`SecAccessControlCreateFlags::USER_PRESENCE`) and ECIES encryption, falling back to Keychain software masking.
-- **Linux**: Direct TPM 2.0 device integration (`/dev/tpmrm0`, `/dev/tpm0`) via `tss-esapi` primary key hashing, with fallback to Desktop Secret Service (`org.freedesktop.secrets`).
+- **Windows**: Primary encryption via TPM 2.0 through Cryptography Next Generation (`NCryptOpenStorageProvider`, `MS_PLATFORM_CRYPTO_PROVIDER`, `BCRYPT_AES_ALGORITHM`). Fallback to Windows DPAPI is explicitly labeled as OS credential protection, not TPM hardware.
+- **macOS**: Secure Enclave hardware binding with user-presence/private-key-use access controls. Software-derived key masking is not used.
+- **Linux**: Direct TPM 2.0 device integration (`/dev/tpmrm0`, `/dev/tpm0`) via `tss-esapi` primary key hashing, with an explicitly labeled OS credential-store fallback when TPM support is unavailable.
 
 ### 2.3 Storage Layer (`src/envfile/lockfile.rs`)
-- **Format**: Committed `.interenv.lock` file formatted as pretty-printed JSON schema version `3.0`.
+- **Format**: Committed `.interenv.lock` file formatted as pretty-printed JSON schema version `4.0`.
 - **Fields**: Encrypted payload, 24-byte nonce hex, project identifier, Argon2id salt, KDF parameters, variable name manifest (values excluded), and `min_compatible_version`.
 - **Path Resolution (`src/util/safe_canonicalize.rs`)**: Strict traversal preventing symlink and reparse-point redirection attacks.
 
@@ -83,6 +83,8 @@ This document describes the architectural layout, internal modules, and security
 ### 2.6 Git Hook Layer (`src/git/`)
 - **Pre-commit Interception**: Automatically discovers `.git` directory across regular repositories, submodules, and worktrees. Installs pre-commit hook preventing staging of unencrypted `.env` files.
 
-### 2.7 Node.js SDK Layer (`scripts/install.js`, `index.js`)
-- **Postinstall Detection**: Resolves platform-specific binaries across `prebuilds/{platform}-{arch}/`, `target/release/`, and `target/debug/`.
-- **Fail-Fast Policy**: Non-zero exit with actionable build guidance if native binary is unavailable.
+### 2.7 Multi-language SDK Layer
+- JavaScript, Python, Go, and PHP SDKs invoke a trusted native binary.
+- Bundled/local binaries are preferred.
+- System `PATH` execution is opt-in via `INTERENV_ALLOW_SYSTEM_PATH=1` because the native process receives decrypted secrets.
+- SDK errors do not echo decrypted stdout.
