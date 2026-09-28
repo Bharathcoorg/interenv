@@ -1,6 +1,5 @@
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 const SERVICE_NAME: &str = "interenv";
@@ -12,23 +11,6 @@ pub struct WrappedMasterKey {
     pub kek_id: String,
     /// Wrapped master key ciphertext bytes.
     pub wrapped: Vec<u8>,
-}
-
-/// Derive a 32-byte Key Encryption Key (KEK) using a per-project random salt and project ID.
-pub fn derive_kek_with_salt(salt: &[u8], project_id: &str) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(b"interenv-kek-v3:");
-    hasher.update(salt);
-    hasher.update(project_id.as_bytes());
-    let res = hasher.finalize();
-    let mut kek = [0u8; 32];
-    kek.copy_from_slice(&res);
-    kek
-}
-
-/// Derive a 32-byte Key Encryption Key (KEK) mask for legacy v2 un-salted payloads.
-pub fn derive_kek_mask(project_id: &str) -> [u8; 32] {
-    derive_kek_with_salt(b"", project_id)
 }
 
 #[cfg(windows)]
@@ -239,7 +221,7 @@ fn unwrap_key_ncrypt(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], Strin
 }
 
 #[cfg(windows)]
-fn wrap_key_dpapi(project_id: &str, master_key: &[u8; 32]) -> Result<(String, Vec<u8>), String> {
+fn wrap_key_dpapi(_project_id: &str, master_key: &[u8; 32]) -> Result<(String, Vec<u8>), String> {
     use rand::rngs::OsRng;
     use rand::RngCore;
     use windows::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
@@ -251,7 +233,7 @@ fn wrap_key_dpapi(project_id: &str, master_key: &[u8; 32]) -> Result<(String, Ve
         cbData: master_key.len() as u32,
         pbData: master_key.as_ptr() as *mut u8,
     };
-    let mut entropy_bytes = derive_kek_with_salt(&salt, project_id);
+    let mut entropy_bytes = salt.to_vec();
     let entropy_blob = CRYPT_INTEGER_BLOB {
         cbData: entropy_bytes.len() as u32,
         pbData: entropy_bytes.as_mut_ptr(),
@@ -284,7 +266,7 @@ fn wrap_key_dpapi(project_id: &str, master_key: &[u8; 32]) -> Result<(String, Ve
 }
 
 #[cfg(windows)]
-fn unwrap_key_dpapi(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String> {
+fn unwrap_key_dpapi(_project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String> {
     use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
 
     // Try salted format first (salt[16] + dpapi_ciphertext)
@@ -295,7 +277,7 @@ fn unwrap_key_dpapi(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String
             cbData: ciphertext.len() as u32,
             pbData: ciphertext.as_ptr() as *mut u8,
         };
-        let mut entropy_bytes = derive_kek_with_salt(salt, project_id);
+        let mut entropy_bytes = salt.to_vec();
         let entropy_blob = CRYPT_INTEGER_BLOB {
             cbData: entropy_bytes.len() as u32,
             pbData: entropy_bytes.as_mut_ptr(),
@@ -334,7 +316,7 @@ fn unwrap_key_dpapi(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String
         cbData: wrapped.len() as u32,
         pbData: wrapped.as_ptr() as *mut u8,
     };
-    let mut entropy_bytes = derive_kek_mask(project_id);
+    return Err("Refusing legacy unsalted DPAPI key; re-lock the project with a current InterEnv build.".into());
     let entropy_blob = CRYPT_INTEGER_BLOB {
         cbData: entropy_bytes.len() as u32,
         pbData: entropy_bytes.as_mut_ptr(),
@@ -413,12 +395,10 @@ fn unwrap_key_platform(kek_id: &str, project_id: &str, wrapped: &[u8]) -> Result
         "macos-secure-enclave-v1" | "macos-secure-enclave" => {
             crate::enclave::macos_secure_enclave::unwrap_key_secure_enclave(project_id, wrapped)
         }
-        "macos-keychain-kek-v3" | "macos-keychain-kek-v2" => {
-            crate::enclave::macos_secure_enclave::unwrap_key_macos_keychain_software(
-                project_id, wrapped,
-            )
-        }
-        "" => crate::enclave::macos_secure_enclave::unwrap_key_secure_enclave(project_id, wrapped),
+        "macos-keychain-kek-v3" | "macos-keychain-kek-v2" => Err(
+            "Refusing legacy macOS software-KEK key; re-lock the project with a current InterEnv build.".into(),
+        ),
+        "" => Err("Refusing unversioned macOS key provider; re-lock the project with a current InterEnv build.".into()),
         unknown => Err(format!(
             "Refusing to unwrap key: unknown or mismatched macOS KEK scheme '{unknown}'"
         )),
@@ -429,117 +409,36 @@ fn unwrap_key_platform(kek_id: &str, project_id: &str, wrapped: &[u8]) -> Result
 fn wrap_key_platform(project_id: &str, master_key: &[u8; 32]) -> Result<(String, Vec<u8>), String> {
     #[cfg(feature = "tpm")]
     {
-        if let Ok(res) = crate::enclave::linux_tpm::wrap_key_tpm2(project_id, master_key) {
-            return Ok(res);
-        }
+        return crate::enclave::linux_tpm::wrap_key_tpm2(project_id, master_key)
+            .map_err(|e| format!("Linux TPM 2.0 sealing failed: {e}"));
     }
 
-    let tpm_active = std::path::Path::new("/sys/class/tpm/tpm0/device/active").exists()
-        || std::path::Path::new("/dev/tpmrm0").exists()
-        || std::path::Path::new("/dev/tpm0").exists();
-
-    if tpm_active {
-        eprintln!("⚠️  WARNING: TPM 2.0 unavailable or failed — falling back to software KEK.");
-        eprintln!(
-            "⚠️  This provides NO hardware security. Install TPM 2.0 or use --no-tpm to suppress."
-        );
-    } else {
-        eprintln!("ℹ️  TPM 2.0 hardware device not detected; using software KEK. Use 'interenv lock --passphrase' for Argon2id protection.");
-    }
-
-    use rand::rngs::OsRng;
-    use rand::RngCore;
-    let mut salt = [0u8; 16];
-    OsRng.fill_bytes(&mut salt);
-    let kek = derive_kek_with_salt(&salt, project_id);
-    let mut combined = Vec::with_capacity(48);
-    combined.extend_from_slice(&salt);
-    for i in 0..32 {
-        combined.push(master_key[i] ^ kek[i]);
-    }
-    let kek_id = if tpm_active {
-        "interenv-kek-v3-linux-tpm-fallback"
-    } else {
-        "interenv-kek-v3-linux-no-tpm"
-    };
-    Ok((kek_id.to_string(), combined))
+    let _ = (project_id, master_key);
+    Err("Linux TPM support is not enabled in this build. Use 'interenv lock --passphrase' or the OS credential-store fallback.".into())
 }
 
 #[cfg(target_os = "linux")]
-fn unwrap_key_platform(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String> {
+fn unwrap_key_platform(kek_id: &str, project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String> {
     #[cfg(feature = "tpm")]
     {
-        match crate::enclave::linux_tpm::unwrap_key_tpm2(project_id, wrapped) {
-            Ok(res) => return Ok(res),
-            Err(e) => {
-                let tpm_exists = std::path::Path::new("/dev/tpmrm0").exists()
-                    || std::path::Path::new("/dev/tpm0").exists();
-                if tpm_exists {
-                    eprintln!("⚠️  TPM operation failed: {e}");
-                } else {
-                    eprintln!("ℹ️  TPM not available: hardware device not found (/dev/tpmrm0)");
-                }
-            }
+        if kek_id == "linux-tpm2-v2" {
+            return crate::enclave::linux_tpm::unwrap_key_tpm2(project_id, wrapped);
         }
     }
-
-    if wrapped.len() == 48 {
-        let salt = &wrapped[..16];
-        let masked = &wrapped[16..48];
-        let kek = derive_kek_with_salt(salt, project_id);
-        let mut key = [0u8; 32];
-        for i in 0..32 {
-            key[i] = masked[i] ^ kek[i];
-        }
-        Ok(key)
-    } else if wrapped.len() == 32 {
-        let kek = derive_kek_mask(project_id);
-        let mut key = [0u8; 32];
-        for i in 0..32 {
-            key[i] = wrapped[i] ^ kek[i];
-        }
-        Ok(key)
-    } else {
-        Err("Wrapped key format invalid: stored keyring key must be 48 bytes (v3) or 32 bytes (legacy v2)".into())
-    }
+    let _ = (project_id, wrapped);
+    Err(format!(
+        "Refusing legacy or software-derived Linux key provider '{kek_id}'. Re-lock the project with a current InterEnv build."
+    ))
 }
 
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-fn wrap_key_platform(project_id: &str, master_key: &[u8; 32]) -> Result<(String, Vec<u8>), String> {
-    use rand::rngs::OsRng;
-    use rand::RngCore;
-    let mut salt = [0u8; 16];
-    OsRng.fill_bytes(&mut salt);
-    let kek = derive_kek_with_salt(&salt, project_id);
-    let mut combined = Vec::with_capacity(48);
-    combined.extend_from_slice(&salt);
-    for i in 0..32 {
-        combined.push(master_key[i] ^ kek[i]);
-    }
-    Ok(("interenv-kek-v3".to_string(), combined))
+fn wrap_key_platform(_project_id: &str, _master_key: &[u8; 32]) -> Result<(String, Vec<u8>), String> {
+    Err("This platform has no supported secure key provider. Use 'interenv lock --passphrase'.".into())
 }
 
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-fn unwrap_key_platform(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String> {
-    if wrapped.len() == 48 {
-        let salt = &wrapped[..16];
-        let masked = &wrapped[16..48];
-        let kek = derive_kek_with_salt(salt, project_id);
-        let mut key = [0u8; 32];
-        for i in 0..32 {
-            key[i] = masked[i] ^ kek[i];
-        }
-        Ok(key)
-    } else if wrapped.len() == 32 {
-        let kek = derive_kek_mask(project_id);
-        let mut key = [0u8; 32];
-        for i in 0..32 {
-            key[i] = wrapped[i] ^ kek[i];
-        }
-        Ok(key)
-    } else {
-        Err("Stored keyring key is not 48 bytes (v3) or 32 bytes (legacy v2)".into())
-    }
+fn unwrap_key_platform(_project_id: &str, _wrapped: &[u8]) -> Result<[u8; 32], String> {
+    Err("This platform has no supported secure key provider. Re-lock with passphrase mode.".into())
 }
 
 /// Wraps and stores a 256-bit master key in the platform OS / hardware keyring.
@@ -587,6 +486,7 @@ pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
 
     #[cfg(target_os = "linux")]
     let raw_key = unwrap_key_platform(_kek_id, project_id, &wrapped)?;
+
 
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     let raw_key = unwrap_key_platform("", project_id, &wrapped)?;
