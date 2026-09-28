@@ -15,7 +15,7 @@ use std::os::unix::fs::PermissionsExt;
 use interenv::cli::{
     Cli, Commands, EditArgs, HookAction, HookArgs, LockArgs, RunArgs, ShowArgs, ShredArgs,
 };
-use interenv::crypto::cipher::{decrypt_payload, encrypt_payload, CIPHER_XCHACHA20_POLY1305};
+use interenv::crypto::cipher::{decrypt_payload, decrypt_payload_with_aad, encrypt_payload_with_aad, CIPHER_XCHACHA20_POLY1305};
 use interenv::crypto::kdf::{
     derive_key_from_passphrase, generate_random_key, generate_salt, OWASP_ARGON2_ITERATIONS,
     OWASP_ARGON2_MEM_KIB, OWASP_ARGON2_PARALLELISM,
@@ -122,19 +122,23 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
         serde_json::to_vec(&env_map).map_err(|e| format!("Serialization error: {}", e))?,
     );
 
-    let payload = encrypt_payload(&json_bytes, &master_key)?;
     let key_names: Vec<String> = env_map.keys().cloned().collect();
 
-    let lock = InterLock::new(
+    let mut lock = InterLock::new(
         project_id.clone(),
         project_name,
         provider,
         salt_hex,
-        payload,
+        interenv::crypto::cipher::EncryptedPayload {
+            nonce_hex: String::new(),
+            ciphertext_hex: String::new(),
+        },
         key_names.clone(),
         KdfParams::default(),
         CIPHER_XCHACHA20_POLY1305.to_string(),
     );
+    let aad = lock.authenticated_metadata()?;
+    lock.payload = encrypt_payload_with_aad(&json_bytes, &master_key, &aad)?;
 
     lock.save(&args.output)?;
     println!(
@@ -144,13 +148,16 @@ fn handle_lock(args: LockArgs) -> Result<(), String> {
         args.output.display().to_string().bold()
     );
 
-    if provider == KeyProviderType::HardwareEnclave {
-        println!(
-            "🔐 Storage: Hardware Enclave / OS Keyring ({})",
+    match provider {
+        KeyProviderType::HardwareEnclave => println!(
+            "🔐 Storage: Hardware-backed key provider ({})",
             project_id.cyan()
-        );
-    } else {
-        println!("🔑 Storage: OWASP Argon2id Passphrase Shield");
+        ),
+        KeyProviderType::OsKeyring => println!(
+            "🔐 Storage: Operating-system credential store ({})",
+            project_id.cyan()
+        ),
+        KeyProviderType::Passphrase => println!("🔑 Storage: OWASP Argon2id Passphrase Shield"),
     }
 
     if args.no_shred {
@@ -213,23 +220,29 @@ fn load_and_decrypt_env(lockfile_path: Option<&Path>) -> Result<(InterLock, Secr
 
     let master_key = enclave::retrieve_key(&lock.project_id, lock.key_provider, &salt)?;
 
-    let decrypted_bytes = decrypt_payload(&lock.payload, &master_key, &lock.cipher)?;
+    let decrypted_bytes = if lock.version == CURRENT_LOCK_VERSION {
+        let aad = lock.authenticated_metadata()?;
+        decrypt_payload_with_aad(&lock.payload, &master_key, &lock.cipher, &aad)?
+    } else {
+        decrypt_payload(&lock.payload, &master_key, &lock.cipher)?
+    };
     let env_map: std::collections::BTreeMap<String, String> =
         serde_json::from_slice(&decrypted_bytes)
             .map_err(|e| format!("Decrypted data corruption: {}", e))?;
 
-    // If lockfile used outdated version, transparently upgrade to latest schema
+    // Legacy lockfiles are accepted for migration and immediately rewritten as authenticated v4.
     if lock.version != CURRENT_LOCK_VERSION {
         let json_bytes = Zeroizing::new(
             serde_json::to_vec(&env_map).map_err(|e| format!("Serialization error: {}", e))?,
         );
-        if let Ok(new_payload) = encrypt_payload(&json_bytes, &master_key) {
-            lock.payload = new_payload;
-            lock.cipher = CIPHER_XCHACHA20_POLY1305.to_string();
-            lock.version = CURRENT_LOCK_VERSION.to_string();
-            lock.updated_at = chrono::Utc::now().to_rfc3339();
-            let _ = lock.save(&path);
-        }
+        lock.cipher = CIPHER_XCHACHA20_POLY1305.to_string();
+        lock.version = CURRENT_LOCK_VERSION.to_string();
+        lock.updated_at = chrono::Utc::now().to_rfc3339();
+        let aad = lock.authenticated_metadata()?;
+        lock.payload = encrypt_payload_with_aad(&json_bytes, &master_key, &aad)?;
+        lock.save(&path).map_err(|e| {
+            format!("Failed to migrate legacy lockfile to authenticated v4: {e}")
+        })?;
     }
 
     let mut inner = std::collections::BTreeMap::new();
@@ -645,15 +658,15 @@ fn handle_edit(args: EditArgs) -> Result<(), String> {
     let json_bytes = Zeroizing::new(
         serde_json::to_vec(&new_env_map).map_err(|e| format!("Serialization error: {}", e))?,
     );
-    let new_payload = encrypt_payload(&json_bytes, &master_key)?;
-
-    lock.payload = new_payload;
     lock.kdf = KdfParams::default();
     lock.cipher = CIPHER_XCHACHA20_POLY1305.to_string();
     lock.version = CURRENT_LOCK_VERSION.to_string();
     lock.keys_count = new_env_map.len();
     lock.key_names = new_env_map.keys().cloned().collect();
     lock.updated_at = chrono::Utc::now().to_rfc3339();
+
+    let aad = lock.authenticated_metadata()?;
+    lock.payload = encrypt_payload_with_aad(&json_bytes, &master_key, &aad)?;
 
     lock.save(&lock_path)?;
     println!(

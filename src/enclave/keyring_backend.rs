@@ -586,23 +586,10 @@ pub fn retrieve_key(project_id: &str) -> Result<Zeroizing<[u8; 32]>, String> {
     let raw_key = unwrap_key_platform(_kek_id, project_id, &wrapped)?;
 
     #[cfg(target_os = "linux")]
-    let raw_key = {
-        #[cfg(feature = "tpm")]
-        if _kek_id == "linux-tpm2-v2" {
-            crate::enclave::linux_tpm::unwrap_key_tpm2(project_id, &wrapped)?
-        } else {
-            unwrap_key_platform(project_id, &wrapped)?
-        }
-        #[cfg(not(feature = "tpm"))]
-        if _kek_id == "linux-tpm2-v2" {
-            return Err("Key was sealed with Linux TPM 2.0 ('linux-tpm2-v2'), but this interenv build was compiled without the 'tpm' feature. Reinstall or compile with '--features tpm'.".into());
-        } else {
-            unwrap_key_platform(project_id, &wrapped)?
-        }
-    };
+    let raw_key = unwrap_key_platform(_kek_id, project_id, &wrapped)?;
 
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-    let raw_key = unwrap_key_platform(project_id, &wrapped)?;
+    let raw_key = unwrap_key_platform("", project_id, &wrapped)?;
 
     Ok(Zeroizing::new(raw_key))
 }

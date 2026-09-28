@@ -11,7 +11,7 @@ pub const DEFAULT_LOCK_FILE: &str = ".interenv.lock";
 /// Legacy lockfile filename (unhidden).
 pub const LEGACY_LOCK_FILE: &str = "interenv.lock";
 /// Current lockfile schema version.
-pub const CURRENT_LOCK_VERSION: &str = "3.0";
+pub const CURRENT_LOCK_VERSION: &str = "4.0";
 
 /// Key provider type used to derive or retrieve the master encryption key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -20,6 +20,8 @@ pub enum KeyProviderType {
     /// Stored in OS Hardware Enclave / Secure Credential Store (`TouchID`, TPM, Windows Credential Manager)
     #[default]
     HardwareEnclave,
+    /// Stored directly in the platform operating system credential store without hardware claims.
+    OsKeyring,
     /// Encrypted with an Argon2id derived passphrase (for CI/CD or headless environments)
     Passphrase,
 }
@@ -149,14 +151,68 @@ impl InterLock {
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Serialization error: {}", e))?;
-        fs::write(path.as_ref(), json).map_err(|e| {
-            format!(
-                "Failed to write lockfile {}: {}",
-                path.as_ref().display(),
-                e
-            )
+        let target = path.as_ref();
+        let parent = target.parent().unwrap_or_else(|| Path::new("."));
+        let file_name = target
+            .file_name()
+            .ok_or_else(|| format!("Invalid lockfile path: {}", target.display()))?;
+        let tmp = parent.join(format!(".{}.{}.tmp", file_name.to_string_lossy(), std::process::id()));
+
+        fs::write(&tmp, json.as_bytes())
+            .map_err(|e| format!("Failed to stage lockfile {}: {}", tmp.display(), e))?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))
+                .map_err(|e| format!("Failed to restrict lockfile permissions: {e}"))?;
+        }
+
+        let file = fs::OpenOptions::new()
+            .write(true)
+            .open(&tmp)
+            .map_err(|e| format!("Failed to open staged lockfile: {e}"))?;
+        file.sync_all()
+            .map_err(|e| format!("Failed to flush staged lockfile: {e}"))?;
+        drop(file);
+
+        fs::rename(&tmp, target).map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            format!("Failed to atomically replace lockfile {}: {}", target.display(), e)
         })?;
         Ok(())
+    }
+
+    /// Canonical metadata authenticated by the v4 payload AEAD.
+    pub fn authenticated_metadata(&self) -> Result<Vec<u8>, String> {
+        #[derive(Serialize)]
+        struct AuthenticatedMetadata<'a> {
+            version: &'a str,
+            min_compatible_version: &'a str,
+            project_id: &'a str,
+            project_name: &'a str,
+            key_provider: KeyProviderType,
+            kdf_salt_hex: &'a str,
+            kdf: &'a KdfParams,
+            cipher: &'a str,
+            keys_count: usize,
+            key_names: &'a [String],
+            created_at: &'a str,
+        }
+
+        serde_json::to_vec(&AuthenticatedMetadata {
+            version: &self.version,
+            min_compatible_version: &self.min_compatible_version,
+            project_id: &self.project_id,
+            project_name: &self.project_name,
+            key_provider: self.key_provider,
+            kdf_salt_hex: &self.kdf_salt_hex,
+            kdf: &self.kdf,
+            cipher: &self.cipher,
+            keys_count: self.keys_count,
+            key_names: &self.key_names,
+            created_at: &self.created_at,
+        }).map_err(|e| format!("Failed to serialize authenticated lock metadata: {e}"))
     }
 
     /// Load the lockfile from the specified path, validating schema compatibility.

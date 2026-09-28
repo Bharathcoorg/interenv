@@ -1,4 +1,4 @@
-use chacha20poly1305::aead::{Aead, KeyInit};
+use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
 use rand::rngs::OsRng;
 use rand::RngCore;
@@ -19,6 +19,15 @@ pub struct EncryptedPayload {
 
 /// Encrypt raw plaintext bytes using XChaCha20-Poly1305 with a 24-byte random nonce.
 pub fn encrypt_payload(plaintext: &[u8], key: &[u8; 32]) -> Result<EncryptedPayload, String> {
+    encrypt_payload_with_aad(plaintext, key, &[])
+}
+
+/// Encrypt raw plaintext bytes while authenticating metadata as AEAD associated data.
+pub fn encrypt_payload_with_aad(
+    plaintext: &[u8],
+    key: &[u8; 32],
+    aad: &[u8],
+) -> Result<EncryptedPayload, String> {
     let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
 
     let mut nonce_bytes = [0u8; 24];
@@ -26,7 +35,7 @@ pub fn encrypt_payload(plaintext: &[u8], key: &[u8; 32]) -> Result<EncryptedPayl
     let nonce = XNonce::from_slice(&nonce_bytes);
 
     let ciphertext = cipher
-        .encrypt(nonce, plaintext)
+        .encrypt(nonce, Payload { msg: plaintext, aad })
         .map_err(|e| format!("XChaCha20-Poly1305 encryption error: {}", e))?;
 
     Ok(EncryptedPayload {
@@ -40,6 +49,16 @@ pub fn decrypt_payload(
     payload: &EncryptedPayload,
     key: &[u8; 32],
     cipher_name: &str,
+) -> Result<Zeroizing<Vec<u8>>, String> {
+    decrypt_payload_with_aad(payload, key, cipher_name, &[])
+}
+
+/// Decrypt ciphertext while verifying authenticated metadata.
+pub fn decrypt_payload_with_aad(
+    payload: &EncryptedPayload,
+    key: &[u8; 32],
+    cipher_name: &str,
+    aad: &[u8],
 ) -> Result<Zeroizing<Vec<u8>>, String> {
     if cipher_name != CIPHER_XCHACHA20_POLY1305 {
         return Err(format!(
@@ -64,8 +83,14 @@ pub fn decrypt_payload(
 
     let nonce = XNonce::from_slice(&nonce_bytes);
     let decrypted = cipher
-        .decrypt(nonce, ciphertext.as_ref())
-        .map_err(|_| "Decryption failed: integrity check failed or invalid key".to_string())?;
+        .decrypt(
+            nonce,
+            Payload {
+                msg: ciphertext.as_ref(),
+                aad,
+            },
+        )
+        .map_err(|_| "Decryption failed: integrity check failed, authenticated metadata changed, or invalid key".to_string())?;
 
     Ok(Zeroizing::new(decrypted))
 }
@@ -85,7 +110,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tamper_detection() {
+    fn test_aad_tamper_detection() {
         let key = [42u8; 32];
         let secret = b"SECRET=supersecret";
         let mut encrypted = encrypt_payload(secret, &key).unwrap();

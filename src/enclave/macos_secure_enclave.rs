@@ -8,59 +8,11 @@ use rand::rngs::OsRng;
 use rand::RngCore;
 
 #[cfg(target_os = "macos")]
-/// Fallback software KEK for macOS environments lacking Secure Enclave.
-pub fn wrap_key_macos_keychain_software(
-    project_id: &str,
-    master_key: &[u8; 32],
-) -> Result<(String, Vec<u8>), String> {
-    let mut salt = [0u8; 16];
-    OsRng.fill_bytes(&mut salt);
-    let kek = derive_kek_with_salt(&salt, project_id);
-    let mut combined = Vec::with_capacity(48);
-    combined.extend_from_slice(&salt);
-    for i in 0..32 {
-        combined.push(master_key[i] ^ kek[i]);
-    }
-    Ok(("macos-keychain-kek-v3".to_string(), combined))
-}
-
-#[cfg(target_os = "macos")]
-/// Fallback software unwrapping for macOS software KEK (supporting v3 salted and v2 legacy).
-pub fn unwrap_key_macos_keychain_software(
-    project_id: &str,
-    wrapped: &[u8],
-) -> Result<[u8; 32], String> {
-    if wrapped.len() == 48 {
-        let salt = &wrapped[..16];
-        let masked = &wrapped[16..48];
-        let kek = derive_kek_with_salt(salt, project_id);
-        let mut key = [0u8; 32];
-        for i in 0..32 {
-            key[i] = masked[i] ^ kek[i];
-        }
-        Ok(key)
-    } else if wrapped.len() == 32 {
-        let kek = derive_kek_mask(project_id);
-        let mut key = [0u8; 32];
-        for i in 0..32 {
-            key[i] = wrapped[i] ^ kek[i];
-        }
-        Ok(key)
-    } else {
-        Err("Stored keyring key is not 48 bytes (v3) or 32 bytes (legacy v2)".into())
-    }
-}
-
-#[cfg(target_os = "macos")]
-/// Wrap master encryption key using Apple Secure Enclave hardware key or software fallback.
+/// Wrap master encryption key using Apple Secure Enclave hardware key.
 pub fn wrap_key_secure_enclave(
     project_id: &str,
     master_key: &[u8; 32],
 ) -> Result<(String, Vec<u8>), String> {
-    if std::env::var("INTERENV_ALLOW_MACOS_SOFTWARE_FALLBACK").unwrap_or_default() == "1" {
-        return wrap_key_macos_keychain_software(project_id, master_key);
-    }
-
     use security_framework::key::{Algorithm, GenerateKeyOptions, KeyType, SecKey, Token};
 
     let key_label = format!("interenv-se-{}", project_id);
@@ -77,7 +29,7 @@ pub fn wrap_key_secure_enclave(
 
     let key = SecKey::new(&options).map_err(|e| {
         format!(
-            "Apple Secure Enclave hardware key generation failed ({e}). Ensure Touch ID is enabled, run 'interenv lock --passphrase', or set INTERENV_ALLOW_MACOS_SOFTWARE_FALLBACK=1 for software fallback."
+"Apple Secure Enclave hardware key generation failed ({e}). Use 'interenv lock --passphrase' or the OS credential-store fallback."
         )
     })?;
 
@@ -96,12 +48,8 @@ pub fn wrap_key_secure_enclave(
 }
 
 #[cfg(target_os = "macos")]
-/// Unwrap master encryption key using Apple Secure Enclave hardware key or software fallback.
+/// Unwrap master encryption key using Apple Secure Enclave hardware key.
 pub fn unwrap_key_secure_enclave(project_id: &str, wrapped: &[u8]) -> Result<[u8; 32], String> {
-    if std::env::var("INTERENV_ALLOW_MACOS_SOFTWARE_FALLBACK").unwrap_or_default() == "1" {
-        return unwrap_key_macos_keychain_software(project_id, wrapped);
-    }
-
     use security_framework::item::{ItemClass, ItemSearchOptions, Reference, SearchResult};
     use security_framework::key::Algorithm;
 
@@ -131,5 +79,5 @@ pub fn unwrap_key_secure_enclave(project_id: &str, wrapped: &[u8]) -> Result<[u8
         }
     }
 
-    Err("Apple Secure Enclave hardware unwrap failed or key not found. Ensure Touch ID is enabled, run with passphrase, or set INTERENV_ALLOW_MACOS_SOFTWARE_FALLBACK=1 for software fallback.".into())
+    Err("Apple Secure Enclave hardware unwrap failed or key not found. Re-lock with passphrase or the OS credential-store provider.".into())
 }

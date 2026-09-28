@@ -24,23 +24,23 @@ pub fn store_key(
         Ok((KeyProviderType::Passphrase, Zeroizing::new(*master_key)))
     } else {
         match keyring_backend::store_key(project_id, master_key) {
-            Ok(_) => Ok((
-                KeyProviderType::HardwareEnclave,
-                Zeroizing::new(*master_key),
-            )),
-            Err(e) => {
-                eprintln!(
-                    "⚠️  Hardware enclave storage unavailable ({}). Falling back to passphrase protection...",
-                    e
-                );
-                let pass = match custom_passphrase {
-                    Some(p) => Zeroizing::new(p.to_string()),
-                    None => fallback::prompt_or_get_passphrase(
-                        "Enter a passphrase to lock project secrets",
-                    )?,
+            Ok(stored) => {
+                let provider = if stored.kek_id.starts_with("linux-tpm")
+                    || stored.kek_id.starts_with("windows-ncrypt")
+                    || stored.kek_id.starts_with("macos-secure-enclave")
+                {
+                    KeyProviderType::HardwareEnclave
+                } else {
+                    KeyProviderType::OsKeyring
                 };
-                let derived = fallback::derive_passphrase_key(&pass, salt)?;
-                Ok((KeyProviderType::Passphrase, derived))
+                Ok((provider, Zeroizing::new(*master_key)))
+            }
+            Err(hardware_error) => {
+                eprintln!(
+                    "ℹ️  Hardware-backed key storage unavailable ({hardware_error}); using the OS credential store without claiming hardware protection."
+                );
+                let _stored = keyring_backend::store_key_os_keyring(project_id, master_key)?;
+                Ok((KeyProviderType::OsKeyring, Zeroizing::new(*master_key)))
             }
         }
     }
@@ -53,7 +53,7 @@ pub fn retrieve_key(
     salt: &[u8],
 ) -> Result<Zeroizing<[u8; 32]>, String> {
     match provider {
-        KeyProviderType::HardwareEnclave => {
+        KeyProviderType::HardwareEnclave | KeyProviderType::OsKeyring => {
             match keyring_backend::retrieve_key(project_id) {
                 Ok(k) => Ok(k),
                 Err(err) => {
