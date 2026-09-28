@@ -13,7 +13,7 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
     }
 
     // Windows helper: resolve .cmd or .bat if command exists in that form
-    let resolved_program = resolve_executable_path(program);
+    let resolved_program = resolve_executable_path(program)?;
 
     let mut cmd = Command::new(&resolved_program);
     cmd.args(args);
@@ -49,7 +49,18 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
             || upper == "RUSTUP_HOME"
             || upper == "RUSTUP_TOOLCHAIN"
         {
-            preserved.insert(k, v);
+            if upper == "PATH" {
+                let safe_path = std::env::split_paths(&v)
+                    .filter(|entry| entry.is_absolute())
+                    .collect::<Vec<_>>();
+                if let Ok(joined) = std::env::join_paths(safe_path) {
+                    if let Ok(joined) = joined.into_string() {
+                        preserved.insert(k, joined);
+                    }
+                }
+            } else {
+                preserved.insert(k, v);
+            }
         }
     }
 
@@ -131,7 +142,6 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
         };
 
         // SAFETY: Win32 CreateJobObjectW accepts null security attributes.
-        let job_res = unsafe { CreateJobObjectW(None, None) };
         let job = match unsafe { CreateJobObjectW(None, None) } {
             Ok(job) => job,
             Err(e) => {
@@ -190,6 +200,9 @@ pub fn execute_with_env(program: &str, args: &[String], secrets: &Secrets) -> Re
 
     let status = child.wait().map_err(|e| format!("Process error: {}", e))?;
     child_pid.store(0, Ordering::SeqCst);
+
+    #[cfg(windows)]
+    unsafe { let _ = windows::Win32::Foundation::CloseHandle(job); }
 
     let exit_code = status.code().unwrap_or(i32::from(!status.success()));
     Ok(exit_code)
