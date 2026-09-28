@@ -1,6 +1,7 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::crypto::cipher::EncryptedPayload;
@@ -160,20 +161,22 @@ impl InterLock {
             .ok_or_else(|| format!("Invalid lockfile path: {}", target.display()))?;
         let tmp = parent.join(format!(".{}.{}.tmp", file_name.to_string_lossy(), std::process::id()));
 
-        fs::write(&tmp, json.as_bytes())
-            .map_err(|e| format!("Failed to stage lockfile {}: {}", tmp.display(), e))?;
-
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))
-                .map_err(|e| format!("Failed to restrict lockfile permissions: {e}"))?;
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
         }
-
-        let file = fs::OpenOptions::new()
-            .write(true)
-            .open(&tmp)
-            .map_err(|e| format!("Failed to open staged lockfile: {e}"))?;
+        let mut file = options.open(&tmp).map_err(|e| {
+            format!(
+                "Failed to create exclusive staged lockfile {}: {}",
+                tmp.display(),
+                e
+            )
+        })?;
+        file.write_all(json.as_bytes())
+            .map_err(|e| format!("Failed to write staged lockfile {}: {}", tmp.display(), e))?;
         file.sync_all()
             .map_err(|e| format!("Failed to flush staged lockfile: {e}"))?;
         drop(file);
